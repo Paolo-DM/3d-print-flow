@@ -1,0 +1,15 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# BMAD Method (installer-managed)
+_bmad
+_bmad-output
+
+# AI tooling (local config)
+.claude
+.mcp.json
