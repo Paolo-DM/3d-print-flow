@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { SpoolCard } from "~/components/SpoolCard"
 import { createSpool } from "~/lib/test-utils"
 
 afterEach(cleanup)
 
+const noop = () => {}
+
 describe("SpoolCard", () => {
   it("renders spool name and color swatch with correct background", () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
-    render(<SpoolCard spool={spool} />)
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={noop} />)
 
     expect(screen.getByText("Red PLA")).toBeTruthy()
 
@@ -22,7 +24,7 @@ describe("SpoolCard", () => {
 
   it("applies border for light colors (lightness > 0.85)", () => {
     const spool = createSpool({ name: "White PLA", hex: "#FFFFFF" })
-    render(<SpoolCard spool={spool} />)
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={noop} />)
 
     const swatch = screen.getByTestId("spool-swatch")
     expect(swatch.className).toContain("border")
@@ -30,7 +32,7 @@ describe("SpoolCard", () => {
 
   it("applies dark mode border for very dark colors (lightness < 0.15)", () => {
     const spool = createSpool({ name: "Black PLA", hex: "#000000" })
-    render(<SpoolCard spool={spool} />)
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={noop} />)
 
     const swatch = screen.getByTestId("spool-swatch")
     expect(swatch.className).toContain("dark:border")
@@ -38,9 +40,26 @@ describe("SpoolCard", () => {
 
   it("does not apply border for mid-range colors", () => {
     const spool = createSpool({ name: "Gray PLA", hex: "#808080" })
-    render(<SpoolCard spool={spool} />)
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={noop} />)
 
     const swatch = screen.getByTestId("spool-swatch")
     expect(swatch.className).not.toContain("border-border")
+  })
+
+  it("renders delete button with correct aria-label", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={noop} />)
+
+    expect(screen.getByLabelText("Delete Red PLA")).toBeTruthy()
+  })
+
+  it("calls onDelete with the spool when delete button is clicked", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    const onDelete = vi.fn()
+    render(<SpoolCard spool={spool} onEdit={noop} onDelete={onDelete} />)
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    expect(onDelete).toHaveBeenCalledWith(spool)
   })
 })

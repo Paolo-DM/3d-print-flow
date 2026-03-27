@@ -2,10 +2,21 @@ import { useState } from "react"
 import { Disc3 } from "lucide-react"
 
 import type { Spool } from "~/lib/types"
+import { getReferencingFigures } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import { useIsMobile } from "~/hooks/use-mobile"
 import { SpoolCard } from "~/components/SpoolCard"
 import { SpoolForm } from "~/components/SpoolForm"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
 import {
   Drawer,
@@ -30,13 +41,20 @@ import {
 
 export default function SpoolLibrary() {
   const spools = usePrintFlowStore((s) => s.spools)
+  const figures = usePrintFlowStore((s) => s.figures)
+  const deleteSpool = usePrintFlowStore((s) => s.deleteSpool)
   const spoolList = Array.from(spools.values())
   const isMobile = useIsMobile()
 
   const [open, setOpen] = useState(false)
   const [editingSpool, setEditingSpool] = useState<Spool | null>(null)
+  const [deletingSpool, setDeletingSpool] = useState<Spool | null>(null)
 
   const title = editingSpool ? "Edit Spool" : "Add Spool"
+
+  const referencingFigures = deletingSpool
+    ? getReferencingFigures(deletingSpool.id, figures)
+    : []
 
   function handleAddSpool() {
     setEditingSpool(null)
@@ -56,6 +74,17 @@ export default function SpoolLibrary() {
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       handleClose()
+    }
+  }
+
+  function handleDeleteSpool(spool: Spool) {
+    setDeletingSpool(spool)
+  }
+
+  function handleConfirmDelete() {
+    if (deletingSpool) {
+      deleteSpool(deletingSpool.id)
+      setDeletingSpool(null)
     }
   }
 
@@ -93,7 +122,7 @@ export default function SpoolLibrary() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
           {spoolList.map((spool) => (
-            <SpoolCard key={spool.id} spool={spool} onEdit={handleEditSpool} />
+            <SpoolCard key={spool.id} spool={spool} onEdit={handleEditSpool} onDelete={handleDeleteSpool} />
           ))}
         </div>
       )}
@@ -117,6 +146,46 @@ export default function SpoolLibrary() {
           </SheetContent>
         </Sheet>
       )}
+
+      <AlertDialog
+        open={deletingSpool !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setDeletingSpool(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {referencingFigures.length > 0 ? "Cannot Delete" : "Delete Spool"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {referencingFigures.length > 0
+                ? `"${deletingSpool?.name}" is used by the following figures:`
+                : `Delete "${deletingSpool?.name}"? No figures use this spool.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {referencingFigures.length > 0 ? (
+            <ul className="list-disc pl-6 text-sm text-foreground">
+              {referencingFigures.map((figure) => (
+                <li key={figure.id}>{figure.name}</li>
+              ))}
+            </ul>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {referencingFigures.length > 0 ? "Close" : "Cancel"}
+            </AlertDialogCancel>
+            {referencingFigures.length === 0 ? (
+              <AlertDialogAction
+                variant="destructive"
+                onClick={handleConfirmDelete}
+              >
+                Delete
+              </AlertDialogAction>
+            ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

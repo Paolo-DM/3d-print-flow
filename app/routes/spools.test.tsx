@@ -6,7 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
 import { store } from "~/lib/store"
-import { createSpool } from "~/lib/test-utils"
+import { createFigure, createSpool } from "~/lib/test-utils"
 import SpoolLibrary from "~/routes/spools"
 
 beforeAll(() => {
@@ -150,5 +150,88 @@ describe("SpoolLibrary route", () => {
         value: originalInnerWidth,
       })
     }
+  })
+
+  it("delete button on card opens AlertDialog", async () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    store.setState({ spools: new Map([[spool.id, spool]]) })
+
+    renderSpools()
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    expect(await screen.findByRole("alertdialog")).toBeTruthy()
+  })
+
+  it("unreferenced spool: AlertDialog shows spool name, no-figures message, Cancel and Delete buttons", async () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    store.setState({ spools: new Map([[spool.id, spool]]) })
+
+    renderSpools()
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    await screen.findByRole("alertdialog")
+
+    expect(screen.getByText("Delete Spool")).toBeTruthy()
+    expect(screen.getByText('Delete "Red PLA"? No figures use this spool.')).toBeTruthy()
+    expect(screen.getByText("Cancel")).toBeTruthy()
+    expect(screen.getByText("Delete")).toBeTruthy()
+  })
+
+  it("referenced spool: AlertDialog shows Cannot Delete and lists figure names, no Delete button", async () => {
+    const spool = createSpool({ id: "spool-1", name: "Red PLA", hex: "#FF0000" })
+    const figure1 = createFigure({ name: "Naruto", requiredColors: ["spool-1"] })
+    const figure2 = createFigure({ name: "Goku", requiredColors: ["spool-1"] })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [figure1.id, figure1],
+        [figure2.id, figure2],
+      ]),
+    })
+
+    renderSpools()
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    await screen.findByRole("alertdialog")
+
+    expect(screen.getByText("Cannot Delete")).toBeTruthy()
+    expect(screen.getByText('"Red PLA" is used by the following figures:')).toBeTruthy()
+    expect(screen.getByText("Naruto")).toBeTruthy()
+    expect(screen.getByText("Goku")).toBeTruthy()
+    expect(screen.getByText("Close")).toBeTruthy()
+    expect(screen.queryByText("Delete")).toBeNull()
+  })
+
+  it("confirming delete removes spool from store", async () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    store.setState({ spools: new Map([[spool.id, spool]]) })
+
+    renderSpools()
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    await screen.findByRole("alertdialog")
+
+    fireEvent.click(screen.getByText("Delete"))
+
+    expect(store.getState().spools.has(spool.id)).toBe(false)
+  })
+
+  it("dialog closes after successful deletion", async () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    store.setState({ spools: new Map([[spool.id, spool]]) })
+
+    renderSpools()
+
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+
+    await screen.findByRole("alertdialog")
+
+    fireEvent.click(screen.getByText("Delete"))
+
+    expect(screen.queryByRole("alertdialog")).toBeNull()
   })
 })

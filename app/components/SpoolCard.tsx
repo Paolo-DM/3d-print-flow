@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
 import type { Spool } from "~/lib/types"
@@ -9,9 +9,10 @@ import { Card, CardContent } from "~/components/ui/card"
 interface SpoolCardProps {
   spool: Spool
   onEdit: (spool: Spool) => void
+  onDelete: (spool: Spool) => void
 }
 
-export function SpoolCard({ spool, onEdit }: SpoolCardProps) {
+export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
   const lightness = getPerceivedLightness(spool.hex)
 
   return (
@@ -29,14 +30,24 @@ export function SpoolCard({ spool, onEdit }: SpoolCardProps) {
         <span className="flex-1 text-sm font-medium text-foreground">
           {spool.name}
         </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => onEdit(spool)}
-          aria-label={`Edit ${spool.name}`}
-        >
-          <Pencil />
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => onEdit(spool)}
+            aria-label={`Edit ${spool.name}`}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => onDelete(spool)}
+            aria-label={`Delete ${spool.name}`}
+          >
+            <Trash2 />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )
