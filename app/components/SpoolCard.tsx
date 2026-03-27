@@ -1,13 +1,17 @@
+import { Pencil } from "lucide-react"
+
 import { getPerceivedLightness } from "~/lib/color-utils"
 import type { Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
+import { Button } from "~/components/ui/button"
 import { Card, CardContent } from "~/components/ui/card"
 
 interface SpoolCardProps {
   spool: Spool
+  onEdit: (spool: Spool) => void
 }
 
-export function SpoolCard({ spool }: SpoolCardProps) {
+export function SpoolCard({ spool, onEdit }: SpoolCardProps) {
   const lightness = getPerceivedLightness(spool.hex)
 
   return (
@@ -22,9 +26,17 @@ export function SpoolCard({ spool }: SpoolCardProps) {
           style={{ backgroundColor: spool.hex }}
           data-testid="spool-swatch"
         />
-        <span className="text-sm font-medium text-foreground">
+        <span className="flex-1 text-sm font-medium text-foreground">
           {spool.name}
         </span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onEdit(spool)}
+          aria-label={`Edit ${spool.name}`}
+        >
+          <Pencil />
+        </Button>
       </CardContent>
     </Card>
   )

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
@@ -72,12 +72,12 @@ describe("SpoolLibrary route", () => {
     expect(screen.getByText("Blue ABS")).toBeTruthy()
   })
 
-  it("renders page header with Spool Library title and disabled Add Spool button", () => {
+  it("renders page header with Spool Library title and enabled Add Spool button", () => {
     renderSpools()
 
     expect(screen.getByText("Spool Library")).toBeTruthy()
     const addButton = screen.getByText("Add Spool").closest("button")
-    expect(addButton?.disabled).toBe(true)
+    expect(addButton?.disabled).toBe(false)
   })
 
   it("near-white spool (#FFFFFF) gets a border class on its swatch", () => {
@@ -103,5 +103,52 @@ describe("SpoolLibrary route", () => {
     renderSpools()
 
     expect(screen.queryByText("No Spools Yet")).toBeNull()
+  })
+
+  it("Add Spool button opens Sheet with form title", async () => {
+    renderSpools()
+
+    const addButton = screen.getByText("Add Spool").closest("button")!
+    fireEvent.click(addButton)
+
+    expect(await screen.findByText("Add Spool", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+  })
+
+  it("edit button on SpoolCard opens form with pre-populated fields", async () => {
+    const spool = createSpool({ name: "Test PLA", hex: "#ff0000" })
+    store.setState({ spools: new Map([[spool.id, spool]]) })
+    renderSpools()
+
+    const editButton = screen.getByLabelText("Edit Test PLA")
+    fireEvent.click(editButton)
+
+    expect(await screen.findByText("Edit Spool", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+
+    const nameInput = screen.getByTestId("spool-name-input") as HTMLInputElement
+    expect(nameInput.value).toBe("Test PLA")
+  })
+
+  it("renders Drawer on mobile viewport", async () => {
+    const originalInnerWidth = window.innerWidth
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 500,
+    })
+
+    try {
+      renderSpools()
+
+      const addButton = screen.getByText("Add Spool").closest("button")!
+      fireEvent.click(addButton)
+
+      expect(await screen.findByText("Add Spool", { selector: "[data-slot='drawer-title']" })).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        writable: true,
+        configurable: true,
+        value: originalInnerWidth,
+      })
+    }
   })
 })
