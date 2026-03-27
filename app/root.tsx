@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import {
   Links,
   Meta,
@@ -8,14 +9,28 @@ import {
 } from "react-router"
 
 import type { Route } from "./+types/root"
+import { AppSidebar } from "~/components/AppSidebar"
+import { Toaster } from "~/components/ui/sonner"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar"
+import { TooltipProvider } from "~/components/ui/tooltip"
+import { initApp } from "~/lib/init"
 import "./app.css"
+
+const darkModeScript = `
+(function() {
+  var theme = localStorage.getItem("theme");
+  var isDark = theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  if (isDark) document.documentElement.classList.add("dark");
+})();
+`
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script dangerouslySetInnerHTML={{ __html: darkModeScript }} />
         <Meta />
         <Links />
       </head>
@@ -29,7 +44,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />
+  useEffect(() => {
+    initApp()
+  }, [])
+
+  return (
+    <TooltipProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-12 items-center gap-2 border-b px-4">
+            <SidebarTrigger />
+          </header>
+          <Outlet />
+        </SidebarInset>
+      </SidebarProvider>
+      <Toaster />
+    </TooltipProvider>
+  )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
