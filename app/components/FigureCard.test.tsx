@@ -1,0 +1,78 @@
+// @vitest-environment jsdom
+import "fake-indexeddb/auto"
+
+import { cleanup, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
+
+import { createFigure, createSpool } from "~/lib/test-utils"
+import { FigureCard } from "~/components/FigureCard"
+
+afterEach(cleanup)
+
+describe("FigureCard", () => {
+  it("renders figure name, franchise, and size", () => {
+    const figure = createFigure({ name: "Naruto", franchise: "Naruto Shippuden", size: 75 })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.getByText("Naruto")).toBeTruthy()
+    expect(screen.getByText("Naruto Shippuden")).toBeTruthy()
+    expect(screen.getByText("75%")).toBeTruthy()
+  })
+
+  it("renders color swatches for assigned spools", () => {
+    const spool1 = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const spool2 = createSpool({ id: "s2", name: "Blue PLA", hex: "#0000FF" })
+    const figure = createFigure({ requiredColors: ["s1", "s2"] })
+    const spoolsMap = new Map([
+      [spool1.id, spool1],
+      [spool2.id, spool2],
+    ])
+
+    render(<FigureCard figure={figure} spools={spoolsMap} />)
+
+    expect(screen.getByText("Red PLA")).toBeTruthy()
+    expect(screen.getByText("Blue PLA")).toBeTruthy()
+    const swatches = screen.getAllByTestId("color-swatch")
+    expect(swatches).toHaveLength(2)
+  })
+
+  it('renders "No colors assigned" when requiredColors is empty', () => {
+    const figure = createFigure({ requiredColors: [] })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.getByText("No colors assigned")).toBeTruthy()
+  })
+
+  it("applies border for near-white spool swatches (lightness > 0.85)", () => {
+    const whiteSpool = createSpool({ id: "s1", name: "White PLA", hex: "#FFFFFF" })
+    const figure = createFigure({ requiredColors: ["s1"] })
+    const spoolsMap = new Map([[whiteSpool.id, whiteSpool]])
+
+    render(<FigureCard figure={figure} spools={spoolsMap} />)
+
+    const swatch = screen.getByTestId("color-swatch")
+    expect(swatch.className).toContain("border")
+  })
+
+  it("silently skips dangling spool references", () => {
+    const figure = createFigure({ requiredColors: ["nonexistent-id"] })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.getByText("No colors assigned")).toBeTruthy()
+    expect(screen.queryByTestId("color-swatch")).toBeNull()
+  })
+
+  it("does not render franchise when it is empty", () => {
+    const figure = createFigure({ name: "Custom Figure", franchise: "" })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.getByText("Custom Figure")).toBeTruthy()
+  })
+
+  it("has data-testid figure-card", () => {
+    const figure = createFigure()
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.getByTestId("figure-card")).toBeTruthy()
+  })
+})

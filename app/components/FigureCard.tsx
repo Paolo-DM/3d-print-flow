@@ -1,0 +1,52 @@
+import { getPerceivedLightness } from "~/lib/color-utils"
+import type { Figure, Spool } from "~/lib/types"
+import { cn } from "~/lib/utils"
+import { Card, CardContent, CardHeader } from "~/components/ui/card"
+
+interface FigureCardProps {
+  figure: Figure
+  spools: Map<string, Spool>
+}
+
+export function FigureCard({ figure, spools }: FigureCardProps) {
+  const resolvedSpools = figure.requiredColors
+    .map((id) => spools.get(id))
+    .filter((s): s is Spool => s !== undefined)
+
+  return (
+    <Card data-testid="figure-card">
+      <CardHeader>
+        <p className="text-lg font-semibold">{figure.name}</p>
+        {figure.franchise ? (
+          <p className="text-sm text-muted-foreground">{figure.franchise}</p>
+        ) : null}
+        <p className="text-sm text-muted-foreground">{figure.size}%</p>
+      </CardHeader>
+      <CardContent>
+        {resolvedSpools.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No colors assigned</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {resolvedSpools.map((spool) => {
+              const lightness = getPerceivedLightness(spool.hex)
+              return (
+                <div key={spool.id} className="flex items-center gap-1">
+                  <div
+                    className={cn(
+                      "size-4 shrink-0 rounded-full",
+                      lightness > 0.85 && "border border-border",
+                      lightness < 0.15 && "dark:border dark:border-border"
+                    )}
+                    style={{ backgroundColor: spool.hex }}
+                    data-testid="color-swatch"
+                  />
+                  <span className="text-sm">{spool.name}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
