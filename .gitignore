@@ -13,3 +13,4 @@ _bmad-output
 # AI tooling (local config)
 .claude
 .mcp.json
+.agents

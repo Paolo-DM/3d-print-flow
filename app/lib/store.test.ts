@@ -91,14 +91,38 @@ describe("store mutations", () => {
   })
 
   it("createFigure generates a unique UUID", () => {
-    store.getState().createFigure({ name: "Naruto", franchise: "", size: 60, notes: "", requiredColors: [] })
-    store.getState().createFigure({ name: "Goku", franchise: "", size: 60, notes: "", requiredColors: [] })
+    store
+      .getState()
+      .createFigure({
+        name: "Naruto",
+        franchise: "",
+        size: 60,
+        notes: "",
+        requiredColors: [],
+      })
+    store
+      .getState()
+      .createFigure({
+        name: "Goku",
+        franchise: "",
+        size: 60,
+        notes: "",
+        requiredColors: [],
+      })
     const ids = [...store.getState().figures.values()].map((f) => f.id)
     expect(ids[0]).not.toBe(ids[1])
   })
 
   it("updateFigure modifies name, franchise, size, notes, and requiredColors", () => {
-    store.getState().createFigure({ name: "Naruto", franchise: "Naruto", size: 60, notes: "", requiredColors: [] })
+    store
+      .getState()
+      .createFigure({
+        name: "Naruto",
+        franchise: "Naruto",
+        size: 60,
+        notes: "",
+        requiredColors: [],
+      })
     const id = [...store.getState().figures.keys()][0]
     store.getState().updateFigure(id, {
       name: "Naruto Uzumaki",
@@ -116,10 +140,40 @@ describe("store mutations", () => {
   })
 
   it("updateFigure is a no-op for unknown id", () => {
-    store.getState().createFigure({ name: "Naruto", franchise: "", size: 60, notes: "", requiredColors: [] })
+    store
+      .getState()
+      .createFigure({
+        name: "Naruto",
+        franchise: "",
+        size: 60,
+        notes: "",
+        requiredColors: [],
+      })
     const before = store.getState().figures
     store.getState().updateFigure("nonexistent", { name: "X" })
     expect(store.getState().figures).toBe(before)
+  })
+
+  it("updateFigure keeps the queueItems Map reference unchanged", () => {
+    const figure = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const queueItem = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      completedColors: ["s1"],
+    })
+    const queueItems = new Map([[queueItem.id, queueItem]])
+
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems,
+    })
+
+    store.getState().updateFigure(figure.id, {
+      requiredColors: ["s2"],
+    })
+
+    expect(store.getState().queueItems).toBe(queueItems)
+    expect(store.getState().queueItems.get(queueItem.id)).toEqual(queueItem)
   })
 
   it("deleteFigure removes figure from figures Map", () => {
@@ -135,7 +189,10 @@ describe("store mutations", () => {
     const q2 = createQueueItem({ id: "q2", figureId: "fig-1" })
     store.setState({
       figures: new Map([["fig-1", figure]]),
-      queueItems: new Map([["q1", q1], ["q2", q2]]),
+      queueItems: new Map([
+        ["q1", q1],
+        ["q2", q2],
+      ]),
     })
     store.getState().deleteFigure("fig-1")
     expect(store.getState().figures.size).toBe(0)
@@ -148,8 +205,14 @@ describe("store mutations", () => {
     const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
     const q2 = createQueueItem({ id: "q2", figureId: "fig-2" })
     store.setState({
-      figures: new Map([["fig-1", fig1], ["fig-2", fig2]]),
-      queueItems: new Map([["q1", q1], ["q2", q2]]),
+      figures: new Map([
+        ["fig-1", fig1],
+        ["fig-2", fig2],
+      ]),
+      queueItems: new Map([
+        ["q1", q1],
+        ["q2", q2],
+      ]),
     })
     store.getState().deleteFigure("fig-1")
     expect(store.getState().queueItems.size).toBe(1)

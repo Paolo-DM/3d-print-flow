@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
+import { computeAffectedQueueItems } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Figure } from "~/lib/types"
 import { cn } from "~/lib/utils"
@@ -26,10 +27,14 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   const [saved, setSaved] = useState(false)
 
   const spools = usePrintFlowStore((s) => s.spools)
+  const queueItems = usePrintFlowStore((s) => s.queueItems)
   const createFigure = usePrintFlowStore((s) => s.createFigure)
   const updateFigure = usePrintFlowStore((s) => s.updateFigure)
 
   const spoolList = Array.from(spools.values())
+  const affectedQueueItems = figure
+    ? computeAffectedQueueItems(figure.id, queueItems)
+    : []
   const canSave = name.trim().length > 0 && !saved
 
   function handleToggleSpool(spoolId: string) {
@@ -131,7 +136,7 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
                       "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
                       isSelected
                         ? "bg-accent ring-2 ring-ring"
-                        : "bg-card border-border"
+                        : "border-border bg-card"
                     )}
                     data-testid={`spool-toggle-${spool.id}`}
                   >
@@ -151,13 +156,20 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
           )}
         </Field>
       </FieldGroup>
-      <div className="mt-auto flex gap-3">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSave}>
-          Save
-        </Button>
+      <div className="mt-auto space-y-3">
+        {figure && affectedQueueItems.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Saving will update {affectedQueueItems.length} queued item(s).
+          </p>
+        ) : null}
+        <div className="flex gap-3">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            Save
+          </Button>
+        </div>
       </div>
     </form>
   )

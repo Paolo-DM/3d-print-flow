@@ -3,6 +3,8 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
+import QueueLayout from "~/routes/_queue"
+
 afterEach(cleanup)
 
 describe("QueueLayout", () => {
@@ -10,7 +12,7 @@ describe("QueueLayout", () => {
     const Stub = createRoutesStub([
       {
         path: "/",
-        lazy: () => import("~/routes/_queue"),
+        Component: QueueLayout,
         children: [
           {
             index: true,
