@@ -2,10 +2,21 @@ import { useState } from "react"
 import { Shapes } from "lucide-react"
 
 import type { Figure } from "~/lib/types"
+import { computeAffectedQueueItems } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import { useIsMobile } from "~/hooks/use-mobile"
 import { FigureCard } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
 import {
   Drawer,
@@ -31,11 +42,18 @@ import {
 export default function FigureCatalog() {
   const figures = usePrintFlowStore((s) => s.figures)
   const spools = usePrintFlowStore((s) => s.spools)
+  const queueItems = usePrintFlowStore((s) => s.queueItems)
+  const deleteFigure = usePrintFlowStore((s) => s.deleteFigure)
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
 
   const [open, setOpen] = useState(false)
   const [editingFigure, setEditingFigure] = useState<Figure | null>(null)
+  const [deletingFigure, setDeletingFigure] = useState<Figure | null>(null)
+
+  const affectedQueueItems = deletingFigure
+    ? computeAffectedQueueItems(deletingFigure.id, queueItems)
+    : []
 
   const title = editingFigure ? "Edit Figure" : "Add Figure"
 
@@ -54,6 +72,12 @@ export default function FigureCatalog() {
     setOpen(true)
   }
 
+  function handleDeleteFigure(figure: Figure) {
+    setOpen(false)
+    setEditingFigure(null)
+    setDeletingFigure(figure)
+  }
+
   function handleClose() {
     setOpen(false)
     setEditingFigure(null)
@@ -62,6 +86,13 @@ export default function FigureCatalog() {
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       handleClose()
+    }
+  }
+
+  function handleConfirmDelete() {
+    if (deletingFigure) {
+      deleteFigure(deletingFigure.id)
+      setDeletingFigure(null)
     }
   }
 
@@ -102,6 +133,7 @@ export default function FigureCatalog() {
               figure={figure}
               spools={spools}
               onEdit={handleEditFigure}
+              onDelete={handleDeleteFigure}
             />
           ))}
         </div>
@@ -126,6 +158,30 @@ export default function FigureCatalog() {
           </SheetContent>
         </Sheet>
       )}
+
+      <AlertDialog
+        open={deletingFigure !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setDeletingFigure(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Figure</AlertDialogTitle>
+            <AlertDialogDescription>
+              {affectedQueueItems.length === 0
+                ? `"${deletingFigure?.name}" is not referenced by any queue items.`
+                : `Deleting "${deletingFigure?.name}" will also remove ${affectedQueueItems.length} queue item(s).`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

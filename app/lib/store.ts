@@ -23,6 +23,7 @@ interface PrintFlowState {
   deleteSpool: (id: string) => void
   createFigure: (data: Omit<Figure, "id">) => void
   updateFigure: (id: string, updates: Partial<Omit<Figure, "id">>) => void
+  deleteFigure: (id: string) => void
 }
 
 export const store = createStore<PrintFlowState>((set) => ({
@@ -73,6 +74,18 @@ export const store = createStore<PrintFlowState>((set) => ({
       const next = new Map(state.figures)
       next.set(id, { ...existing, ...updates })
       return { figures: next }
+    })
+  },
+
+  deleteFigure(id) {
+    set((state) => {
+      const nextFigures = new Map(state.figures)
+      nextFigures.delete(id)
+      const nextQueue = new Map(state.queueItems)
+      for (const [qid, qi] of nextQueue) {
+        if (qi.figureId === id) nextQueue.delete(qid)
+      }
+      return { figures: nextFigures, queueItems: nextQueue }
     })
   },
 }))
