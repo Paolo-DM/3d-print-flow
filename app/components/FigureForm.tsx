@@ -43,10 +43,11 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   function handleSave() {
     if (!canSave) return
     setSaved(true)
+    const clampedSize = Math.round(Math.max(1, Math.min(999, size || 60)))
     const data = {
       name: name.trim(),
       franchise: franchise.trim(),
-      size,
+      size: clampedSize,
       notes,
       requiredColors: selectedColors.filter((id) => spools.has(id)),
     }
