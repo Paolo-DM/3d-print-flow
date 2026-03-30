@@ -70,6 +70,57 @@ describe("store mutations", () => {
     store.getState().deleteSpool(id)
     expect(store.getState().spools.size).toBe(0)
   })
+
+  it("createFigure adds a figure with UUID and correct data", () => {
+    store.getState().createFigure({
+      name: "Naruto",
+      franchise: "Naruto Shippuden",
+      size: 75,
+      notes: "test note",
+      requiredColors: ["spool-1"],
+    })
+    const figures = store.getState().figures
+    expect(figures.size).toBe(1)
+    const figure = [...figures.values()][0]
+    expect(figure.name).toBe("Naruto")
+    expect(figure.franchise).toBe("Naruto Shippuden")
+    expect(figure.size).toBe(75)
+    expect(figure.notes).toBe("test note")
+    expect(figure.requiredColors).toEqual(["spool-1"])
+    expect(figure.id).toBeTruthy()
+  })
+
+  it("createFigure generates a unique UUID", () => {
+    store.getState().createFigure({ name: "Naruto", franchise: "", size: 60, notes: "", requiredColors: [] })
+    store.getState().createFigure({ name: "Goku", franchise: "", size: 60, notes: "", requiredColors: [] })
+    const ids = [...store.getState().figures.values()].map((f) => f.id)
+    expect(ids[0]).not.toBe(ids[1])
+  })
+
+  it("updateFigure modifies name, franchise, size, notes, and requiredColors", () => {
+    store.getState().createFigure({ name: "Naruto", franchise: "Naruto", size: 60, notes: "", requiredColors: [] })
+    const id = [...store.getState().figures.keys()][0]
+    store.getState().updateFigure(id, {
+      name: "Naruto Uzumaki",
+      franchise: "Naruto Shippuden",
+      size: 80,
+      notes: "updated",
+      requiredColors: ["s1", "s2"],
+    })
+    const figure = store.getState().figures.get(id)
+    expect(figure?.name).toBe("Naruto Uzumaki")
+    expect(figure?.franchise).toBe("Naruto Shippuden")
+    expect(figure?.size).toBe(80)
+    expect(figure?.notes).toBe("updated")
+    expect(figure?.requiredColors).toEqual(["s1", "s2"])
+  })
+
+  it("updateFigure is a no-op for unknown id", () => {
+    store.getState().createFigure({ name: "Naruto", franchise: "", size: 60, notes: "", requiredColors: [] })
+    const before = store.getState().figures
+    store.getState().updateFigure("nonexistent", { name: "X" })
+    expect(store.getState().figures).toBe(before)
+  })
 })
 
 describe("persistence flag", () => {
