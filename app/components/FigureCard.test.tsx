@@ -67,6 +67,10 @@ describe("FigureCard", () => {
     render(<FigureCard figure={figure} spools={new Map()} />)
 
     expect(screen.getByText("Custom Figure")).toBeTruthy()
+    const header = screen.getByText("Custom Figure").closest("[data-slot='card-header']")!
+    const paragraphs = header.querySelectorAll("p")
+    // name + size = 2 paragraphs; franchise paragraph should be absent (would be 3 if rendered)
+    expect(paragraphs).toHaveLength(2)
   })
 
   it("has data-testid figure-card", () => {

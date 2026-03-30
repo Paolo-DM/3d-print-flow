@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
+import { createRoutesStub } from "react-router"
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { createRoutesStub } from "react-router"
 
 import { store } from "~/lib/store"
 import { createFigure, createSpool } from "~/lib/test-utils"
