@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createFigure, createSpool } from "~/lib/test-utils"
 import { FigureCard } from "~/components/FigureCard"
@@ -78,5 +78,31 @@ describe("FigureCard", () => {
     render(<FigureCard figure={figure} spools={new Map()} />)
 
     expect(screen.getByTestId("figure-card")).toBeTruthy()
+  })
+
+  it("renders edit button when onEdit is provided", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const onEdit = vi.fn()
+    render(<FigureCard figure={figure} spools={new Map()} onEdit={onEdit} />)
+
+    expect(screen.getByRole("button", { name: "Edit Naruto" })).toBeTruthy()
+  })
+
+  it("edit button calls onEdit with the figure", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const onEdit = vi.fn()
+    render(<FigureCard figure={figure} spools={new Map()} onEdit={onEdit} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Naruto" }))
+
+    expect(onEdit).toHaveBeenCalledOnce()
+    expect(onEdit).toHaveBeenCalledWith(figure)
+  })
+
+  it("does not render edit button when onEdit is not provided", () => {
+    const figure = createFigure({ name: "Naruto" })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.queryByRole("button", { name: "Edit Naruto" })).toBeNull()
   })
 })

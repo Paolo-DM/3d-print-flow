@@ -1,14 +1,18 @@
+import { Pencil } from "lucide-react"
+
 import { getPerceivedLightness } from "~/lib/color-utils"
 import type { Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
+import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardHeader } from "~/components/ui/card"
 
 interface FigureCardProps {
   figure: Figure
   spools: Map<string, Spool>
+  onEdit?: (figure: Figure) => void
 }
 
-export function FigureCard({ figure, spools }: FigureCardProps) {
+export function FigureCard({ figure, spools, onEdit }: FigureCardProps) {
   const resolvedSpools = figure.requiredColors
     .map((id) => spools.get(id))
     .filter((s): s is Spool => s !== undefined)
@@ -16,11 +20,27 @@ export function FigureCard({ figure, spools }: FigureCardProps) {
   return (
     <Card data-testid="figure-card">
       <CardHeader>
-        <p className="text-lg font-semibold">{figure.name}</p>
-        {figure.franchise ? (
-          <p className="text-sm text-muted-foreground">{figure.franchise}</p>
-        ) : null}
-        <p className="text-sm text-muted-foreground">{figure.size}%</p>
+        <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-1">
+            <p className="text-lg font-semibold">{figure.name}</p>
+            {figure.franchise ? (
+              <p className="text-sm text-muted-foreground">{figure.franchise}</p>
+            ) : null}
+            <p className="text-sm text-muted-foreground">{figure.size}%</p>
+          </div>
+          {onEdit ? (
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEdit(figure)}
+                aria-label={`Edit ${figure.name}`}
+              >
+                <Pencil />
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent>
         {resolvedSpools.length === 0 ? (

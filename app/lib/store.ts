@@ -21,6 +21,8 @@ interface PrintFlowState {
   createSpool: (data: Omit<Spool, "id">) => void
   updateSpool: (id: string, updates: Partial<Omit<Spool, "id">>) => void
   deleteSpool: (id: string) => void
+  createFigure: (data: Omit<Figure, "id">) => void
+  updateFigure: (id: string, updates: Partial<Omit<Figure, "id">>) => void
 }
 
 export const store = createStore<PrintFlowState>((set) => ({
@@ -52,6 +54,25 @@ export const store = createStore<PrintFlowState>((set) => ({
       const next = new Map(state.spools)
       next.delete(id)
       return { spools: next }
+    })
+  },
+
+  createFigure(data) {
+    set((state) => {
+      const id = crypto.randomUUID()
+      const next = new Map(state.figures)
+      next.set(id, { id, ...data })
+      return { figures: next }
+    })
+  },
+
+  updateFigure(id, updates) {
+    set((state) => {
+      const existing = state.figures.get(id)
+      if (!existing) return state
+      const next = new Map(state.figures)
+      next.set(id, { ...existing, ...updates })
+      return { figures: next }
     })
   },
 }))

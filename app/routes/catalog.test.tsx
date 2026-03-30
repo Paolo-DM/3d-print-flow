@@ -2,7 +2,7 @@
 import "fake-indexeddb/auto"
 
 import { createRoutesStub } from "react-router"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { store } from "~/lib/store"
@@ -134,11 +134,44 @@ describe("FigureCatalog route", () => {
     expect(screen.getByText("Figure Catalog")).toBeTruthy()
   })
 
-  it("renders disabled Add Figure button in header", () => {
+  it("renders enabled Add Figure button in header", () => {
     renderCatalog()
 
     const addButtons = screen.getAllByText("Add Figure").map((el) => el.closest("button"))
-    expect(addButtons.some((btn) => btn?.disabled === true)).toBe(true)
+    expect(addButtons.every((btn) => btn?.disabled !== true)).toBe(true)
+  })
+
+  it("header Add Figure button opens the form panel", () => {
+    renderCatalog()
+
+    const headerButton = screen.getAllByText("Add Figure")[0].closest("button")!
+    fireEvent.click(headerButton)
+
+    expect(screen.getByText("Add Figure", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+  })
+
+  it("empty state CTA button opens the form panel", () => {
+    renderCatalog()
+
+    // The CTA is the second "Add Figure" button (inside the empty state EmptyContent)
+    const addButtons = screen.getAllByText("Add Figure").map((el) => el.closest("button")!)
+    fireEvent.click(addButtons[addButtons.length - 1])
+
+    expect(screen.getByText("Add Figure", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+  })
+
+  it("edit button on FigureCard opens form pre-populated with figure data", () => {
+    const figure = createFigure({ name: "Sasuke", franchise: "Naruto", size: 80, notes: "", requiredColors: [] })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog()
+
+    const editButton = screen.getByRole("button", { name: `Edit Sasuke` })
+    fireEvent.click(editButton)
+
+    expect(screen.getByText("Edit Figure")).toBeTruthy()
+    const nameInput = screen.getByTestId("figure-name-input") as HTMLInputElement
+    expect(nameInput.value).toBe("Sasuke")
   })
 
   it("renders singular spool count in empty description when exactly one spool exists", () => {
