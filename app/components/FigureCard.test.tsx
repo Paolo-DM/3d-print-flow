@@ -105,4 +105,30 @@ describe("FigureCard", () => {
 
     expect(screen.queryByRole("button", { name: "Edit Naruto" })).toBeNull()
   })
+
+  it("renders delete button when onDelete is provided", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const onDelete = vi.fn()
+    render(<FigureCard figure={figure} spools={new Map()} onDelete={onDelete} />)
+
+    expect(screen.getByRole("button", { name: "Delete Naruto" })).toBeTruthy()
+  })
+
+  it("delete button calls onDelete with the figure", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const onDelete = vi.fn()
+    render(<FigureCard figure={figure} spools={new Map()} onDelete={onDelete} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+
+    expect(onDelete).toHaveBeenCalledOnce()
+    expect(onDelete).toHaveBeenCalledWith(figure)
+  })
+
+  it("does not render delete button when onDelete is not provided", () => {
+    const figure = createFigure({ name: "Naruto" })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    expect(screen.queryByRole("button", { name: "Delete Naruto" })).toBeNull()
+  })
 })

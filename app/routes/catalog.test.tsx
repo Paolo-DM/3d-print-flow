@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { store } from "~/lib/store"
-import { createFigure, createSpool } from "~/lib/test-utils"
+import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
 import FigureCatalog from "~/routes/catalog"
 
 beforeAll(() => {
@@ -185,5 +185,92 @@ describe("FigureCatalog route", () => {
         "Great, you have 1 spool! Create your first figure to start building your catalog."
       )
     ).toBeTruthy()
+  })
+
+  it("delete button on FigureCard opens AlertDialog", () => {
+    const figure = createFigure({ name: "Naruto" })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+
+    expect(screen.getByRole("alertdialog")).toBeTruthy()
+    expect(screen.getByText("Delete Figure")).toBeTruthy()
+  })
+
+  it('AlertDialog shows "not referenced by any queue items" when no queue items exist', () => {
+    const figure = createFigure({ name: "Naruto" })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+
+    expect(
+      screen.getByText(`"Naruto" is not referenced by any queue items.`)
+    ).toBeTruthy()
+  })
+
+  it("AlertDialog shows affected count when queue items reference the figure", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const q1 = createQueueItem({ figureId: figure.id })
+    const q2 = createQueueItem({ figureId: figure.id })
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([[q1.id, q1], [q2.id, q2]]),
+    })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+
+    expect(
+      screen.getByText(`Deleting "Naruto" will also remove 2 queue item(s).`)
+    ).toBeTruthy()
+  })
+
+  it("confirming delete removes figure from store", () => {
+    const figure = createFigure({ name: "Naruto" })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+
+    expect(store.getState().figures.size).toBe(0)
+  })
+
+  it("confirming delete cascades to remove referencing queue items", () => {
+    const figure = createFigure({ name: "Naruto" })
+    const q1 = createQueueItem({ figureId: figure.id })
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([[q1.id, q1]]),
+    })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+
+    expect(store.getState().figures.size).toBe(0)
+    expect(store.getState().queueItems.size).toBe(0)
+  })
+
+  it("cancel closes dialog with no changes", () => {
+    const figure = createFigure({ name: "Naruto" })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Naruto" }))
+    expect(screen.getByRole("alertdialog")).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+    expect(store.getState().figures.size).toBe(1)
   })
 })

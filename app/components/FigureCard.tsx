@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
 import type { Figure, Spool } from "~/lib/types"
@@ -10,9 +10,10 @@ interface FigureCardProps {
   figure: Figure
   spools: Map<string, Spool>
   onEdit?: (figure: Figure) => void
+  onDelete?: (figure: Figure) => void
 }
 
-export function FigureCard({ figure, spools, onEdit }: FigureCardProps) {
+export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps) {
   const resolvedSpools = figure.requiredColors
     .map((id) => spools.get(id))
     .filter((s): s is Spool => s !== undefined)
@@ -28,16 +29,28 @@ export function FigureCard({ figure, spools, onEdit }: FigureCardProps) {
             ) : null}
             <p className="text-sm text-muted-foreground">{figure.size}%</p>
           </div>
-          {onEdit ? (
+          {onEdit || onDelete ? (
             <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onEdit(figure)}
-                aria-label={`Edit ${figure.name}`}
-              >
-                <Pencil />
-              </Button>
+              {onEdit ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => onEdit(figure)}
+                  aria-label={`Edit ${figure.name}`}
+                >
+                  <Pencil />
+                </Button>
+              ) : null}
+              {onDelete ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => onDelete(figure)}
+                  aria-label={`Delete ${figure.name}`}
+                >
+                  <Trash2 />
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </div>

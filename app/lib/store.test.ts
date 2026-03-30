@@ -121,6 +121,53 @@ describe("store mutations", () => {
     store.getState().updateFigure("nonexistent", { name: "X" })
     expect(store.getState().figures).toBe(before)
   })
+
+  it("deleteFigure removes figure from figures Map", () => {
+    const figure = createFigure({ id: "fig-1" })
+    store.setState({ figures: new Map([["fig-1", figure]]) })
+    store.getState().deleteFigure("fig-1")
+    expect(store.getState().figures.size).toBe(0)
+  })
+
+  it("deleteFigure cascades: removes all queue items referencing the figure", () => {
+    const figure = createFigure({ id: "fig-1" })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+    const q2 = createQueueItem({ id: "q2", figureId: "fig-1" })
+    store.setState({
+      figures: new Map([["fig-1", figure]]),
+      queueItems: new Map([["q1", q1], ["q2", q2]]),
+    })
+    store.getState().deleteFigure("fig-1")
+    expect(store.getState().figures.size).toBe(0)
+    expect(store.getState().queueItems.size).toBe(0)
+  })
+
+  it("deleteFigure does not affect queue items for other figures", () => {
+    const fig1 = createFigure({ id: "fig-1" })
+    const fig2 = createFigure({ id: "fig-2" })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+    const q2 = createQueueItem({ id: "q2", figureId: "fig-2" })
+    store.setState({
+      figures: new Map([["fig-1", fig1], ["fig-2", fig2]]),
+      queueItems: new Map([["q1", q1], ["q2", q2]]),
+    })
+    store.getState().deleteFigure("fig-1")
+    expect(store.getState().queueItems.size).toBe(1)
+    expect(store.getState().queueItems.get("q2")).toEqual(q2)
+  })
+
+  it("deleteFigure is a no-op for non-existent figure ID", () => {
+    const figure = createFigure({ id: "fig-1" })
+    store.setState({ figures: new Map([["fig-1", figure]]) })
+    const beforeFigures = store.getState().figures
+    const beforeQueue = store.getState().queueItems
+    store.getState().deleteFigure("nonexistent")
+    expect(store.getState().figures.size).toBe(1)
+    expect([...store.getState().figures.values()]).toEqual([figure])
+    // References must be identical — true no-op avoids spurious persistence writes
+    expect(store.getState().figures).toBe(beforeFigures)
+    expect(store.getState().queueItems).toBe(beforeQueue)
+  })
 })
 
 describe("persistence flag", () => {
