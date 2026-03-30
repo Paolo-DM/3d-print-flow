@@ -79,6 +79,7 @@ export const store = createStore<PrintFlowState>((set) => ({
 
   deleteFigure(id) {
     set((state) => {
+      if (!state.figures.has(id)) return state
       const nextFigures = new Map(state.figures)
       nextFigures.delete(id)
       const nextQueue = new Map(state.queueItems)

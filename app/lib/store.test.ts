@@ -163,11 +163,10 @@ describe("store mutations", () => {
     const beforeQueue = store.getState().queueItems
     store.getState().deleteFigure("nonexistent")
     expect(store.getState().figures.size).toBe(1)
-    // Maps are new references but content unchanged
     expect([...store.getState().figures.values()]).toEqual([figure])
-    expect(store.getState().queueItems).not.toBe(beforeFigures)
-    // Queue remains empty / unchanged
-    expect(store.getState().queueItems.size).toBe(beforeQueue.size)
+    // References must be identical — true no-op avoids spurious persistence writes
+    expect(store.getState().figures).toBe(beforeFigures)
+    expect(store.getState().queueItems).toBe(beforeQueue)
   })
 })
 
