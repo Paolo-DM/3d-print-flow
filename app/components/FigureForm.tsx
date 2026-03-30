@@ -45,10 +45,10 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
     setSaved(true)
     const data = {
       name: name.trim(),
-      franchise,
+      franchise: franchise.trim(),
       size,
       notes,
-      requiredColors: selectedColors,
+      requiredColors: selectedColors.filter((id) => spools.has(id)),
     }
     if (figure) {
       updateFigure(figure.id, data)
