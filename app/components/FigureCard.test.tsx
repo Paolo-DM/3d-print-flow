@@ -4,10 +4,14 @@ import "fake-indexeddb/auto"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { store } from "~/lib/store"
 import { createFigure, createSpool } from "~/lib/test-utils"
 import { FigureCard } from "~/components/FigureCard"
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  store.setState({ spools: new Map(), figures: new Map(), queueItems: new Map() })
+})
 
 describe("FigureCard", () => {
   it("renders figure name, franchise, and size", () => {
@@ -130,5 +134,42 @@ describe("FigureCard", () => {
     render(<FigureCard figure={figure} spools={new Map()} />)
 
     expect(screen.queryByRole("button", { name: "Delete Naruto" })).toBeNull()
+  })
+
+  it("disables Add to Queue button when figure has zero requiredColors", () => {
+    const figure = createFigure({ name: "Empty", requiredColors: [] })
+    render(<FigureCard figure={figure} spools={new Map()} />)
+
+    const btn = screen.getByRole("button", { name: "Add Empty to queue" })
+    expect(btn.disabled).toBe(true)
+  })
+
+  it("Add to Queue Stock dispatches addToQueue with stock type", () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
+    render(<FigureCard figure={figure} spools={new Map([["s1", spool]])} />)
+
+    const trigger = screen.getByRole("button", { name: "Add Naruto to queue" })
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
+    fireEvent.click(screen.getByText("Stock"))
+
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(1)
+    expect(items[0].figureId).toBe(figure.id)
+    expect(items[0].type).toBe("stock")
+  })
+
+  it("Add to Queue Order dispatches addToQueue with order type", () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
+    render(<FigureCard figure={figure} spools={new Map([["s1", spool]])} />)
+
+    const trigger = screen.getByRole("button", { name: "Add Naruto to queue" })
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
+    fireEvent.click(screen.getByText("Order"))
+
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(1)
+    expect(items[0].type).toBe("order")
   })
 })

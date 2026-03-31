@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ListPlus, Pencil, Trash2 } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
@@ -23,6 +23,11 @@ interface FigureCardProps {
 
 export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps) {
   const [added, setAdded] = useState(false)
+  const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (addedTimer.current) clearTimeout(addedTimer.current)
+  }, [])
 
   const resolvedSpools = figure.requiredColors
     .map((id) => spools.get(id))
@@ -31,7 +36,8 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
   function handleAddToQueue(type: "stock" | "order") {
     store.getState().addToQueue(figure.id, type)
     setAdded(true)
-    setTimeout(() => setAdded(false), 1500)
+    if (addedTimer.current) clearTimeout(addedTimer.current)
+    addedTimer.current = setTimeout(() => setAdded(false), 1500)
   }
 
   return (

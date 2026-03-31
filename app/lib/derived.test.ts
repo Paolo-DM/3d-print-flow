@@ -148,6 +148,21 @@ describe("computeColorRanking", () => {
     expect(result[0].hasOrders).toBe(true)
   })
 
+  it("excludes orphaned spool references not in spools Map", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1", "s-deleted"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: [] })
+
+    const spools = new Map([["s1", s1]])
+    const figures = new Map([["fig-1", fig]])
+    const queueItems = new Map([["q1", q1]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].spool.id).toBe("s1")
+  })
+
   it("hasOrders is false when only stock-type queue items", () => {
     const s1 = createSpool({ id: "s1" })
     const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })

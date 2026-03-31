@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { Shapes } from "lucide-react"
 
-import type { Figure } from "~/lib/types"
-import { computeAffectedQueueItems } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
+import { computeAffectedQueueItems } from "~/lib/derived"
+import type { Figure } from "~/lib/types"
 import { useIsMobile } from "~/hooks/use-mobile"
 import { FigureCard } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
