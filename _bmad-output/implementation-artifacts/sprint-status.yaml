@@ -53,7 +53,7 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Figure Catalog Management
-  epic-2: in-progress
+  epic-2: done
   2-1-figure-catalog-view-empty-state: done
   2-2-create-edit-figure-with-color-assignment: done
   2-3-delete-figure-with-cascade-confirmation: done
@@ -65,9 +65,9 @@ development_status:
   3-1-add-to-queue-queue-store-mutations: done
   3-2-color-view-ranked-color-list-expandable-figure-lists: done
   3-3-colorchip-toggle-the-signature-interaction: done
-  3-4-figure-view-queue-as-figure-cards: review
+  3-4-figure-view-queue-as-figure-cards: done
   3-5-figure-completion-cascade-completed-section: done
-  3-6-order-priority-in-color-ranking: backlog
+  3-6-order-priority-in-color-ranking: done
   3-7-edit-form-affected-queue-items-warning: backlog
   epic-3-retrospective: optional
 

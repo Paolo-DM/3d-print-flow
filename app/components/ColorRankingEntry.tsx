@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible"
 import { Progress } from "~/components/ui/progress"
+import { Separator } from "~/components/ui/separator"
 import { ColorChip } from "~/components/ColorChip"
 import type { CompletionPhase } from "~/components/QueueItemCard"
 
@@ -104,6 +105,10 @@ export function ColorRankingEntry({
       return 0
     })
 
+  const orderEndIndex = matchingItems.findIndex((qi) => qi.type !== "order")
+  const hasOrderStockBoundary =
+    orderEndIndex > 0 && orderEndIndex < matchingItems.length
+
   return (
     <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
@@ -153,7 +158,7 @@ export function ColorRankingEntry({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="space-y-3 pt-1 pr-3 pb-3 pl-9">
-          {matchingItems.map((qi) => {
+          {matchingItems.map((qi, index) => {
             const figure = figures.get(qi.figureId)
             if (!figure) return null
             const progress = computeFigureProgress(qi, figure)
@@ -163,67 +168,78 @@ export function ColorRankingEntry({
                 : 0
             const phase = completionPhases.get(qi.id)
             return (
-              <div
-                key={qi.id}
-                className={cn(
-                  "space-y-2 rounded-md border p-3",
-                  phase === "pulsing" && "animate-completion-pulse",
-                  phase === "collapsing" &&
-                    "animate-completion-collapse overflow-hidden"
+              <div key={qi.id}>
+                {index === orderEndIndex && hasOrderStockBoundary && (
+                  <Separator className="my-3" data-testid="order-stock-separator" />
                 )}
-                onAnimationEnd={
-                  phase
-                    ? externalCompletionPhases
-                      ? () => onExternalCompletionPhaseEnd?.(qi.id, phase)
-                      : () => {
-                          if (phase === "pulsing") {
-                            completingRef.current.set(qi.id, "collapsing")
-                          } else {
-                            completingRef.current.delete(qi.id)
+                <div
+                  className={cn(
+                    "space-y-2 rounded-md border p-3",
+                    phase === "pulsing" && "animate-completion-pulse",
+                    phase === "collapsing" &&
+                      "animate-completion-collapse overflow-hidden"
+                  )}
+                  onAnimationEnd={
+                    phase
+                      ? externalCompletionPhases
+                        ? () => onExternalCompletionPhaseEnd?.(qi.id, phase)
+                        : () => {
+                            if (phase === "pulsing") {
+                              completingRef.current.set(qi.id, "collapsing")
+                            } else {
+                              completingRef.current.delete(qi.id)
+                            }
+                            setTick((n) => n + 1)
                           }
-                          setTick((n) => n + 1)
-                        }
-                    : undefined
-                }
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">{figure.name}</p>
-                    {figure.franchise ? (
-                      <p className="text-xs text-muted-foreground">
-                        {figure.franchise}
-                      </p>
-                    ) : null}
+                      : undefined
+                  }
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{figure.name}</p>
+                      {figure.franchise ? (
+                        <p className="text-xs text-muted-foreground">
+                          {figure.franchise}
+                        </p>
+                      ) : null}
+                    </div>
+                    {qi.type === "order" ? (
+                      <Badge
+                        variant="outline"
+                        className="text-orange-600 dark:text-orange-400"
+                      >
+                        Order
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
+                        Stock
+                      </Badge>
+                    )}
                   </div>
-                  {qi.type === "order" ? (
-                    <Badge
-                      variant="outline"
-                      className="text-orange-600 dark:text-orange-400"
-                    >
-                      Order
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {figure.requiredColors.map((spoolId) => {
-                    const spool = spools.get(spoolId)
-                    if (!spool) return null
-                    return (
-                      <ColorChip
-                        key={`${qi.id}-${spoolId}`}
-                        spool={spool}
-                        isCompleted={qi.completedColors.includes(spoolId)}
-                        isCurrent={spoolId === currentSpoolId}
-                        onClick={() => toggleChip(qi.id, spoolId)}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Progress value={percentage} className="flex-1" />
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {progress.completed}/{progress.total}
-                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {figure.requiredColors.map((spoolId) => {
+                      const spool = spools.get(spoolId)
+                      if (!spool) return null
+                      return (
+                        <ColorChip
+                          key={`${qi.id}-${spoolId}`}
+                          spool={spool}
+                          isCompleted={qi.completedColors.includes(spoolId)}
+                          isCurrent={spoolId === currentSpoolId}
+                          onClick={() => toggleChip(qi.id, spoolId)}
+                        />
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={percentage} className="flex-1" />
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {progress.completed}/{progress.total}
+                    </span>
+                  </div>
                 </div>
               </div>
             )

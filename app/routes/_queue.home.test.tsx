@@ -229,6 +229,99 @@ describe("ColorView route", () => {
     ).toBe(false)
   })
 
+  it("shows Order badge on ranking entry when it contains order items", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Order Fig",
+      requiredColors: ["s1"],
+    })
+    const qi = createQueueItem({
+      figureId: "f1",
+      type: "order",
+      completedColors: [],
+    })
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([[qi.id, qi]]),
+    })
+
+    renderColorView()
+    const entry = await screen.findByTestId("color-ranking-entry")
+    expect(within(entry).getByText("Order")).toBeTruthy()
+  })
+
+  it("does not show Order badge on ranking entry when only stock items", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Stock Fig",
+      requiredColors: ["s1"],
+    })
+    const qi = createQueueItem({
+      figureId: "f1",
+      type: "stock",
+      completedColors: [],
+    })
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([[qi.id, qi]]),
+    })
+
+    renderColorView()
+    const entry = await screen.findByTestId("color-ranking-entry")
+    expect(within(entry).queryByText("Order")).toBeNull()
+  })
+
+  it("shows order items above stock items in expanded list", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const stockFigure = createFigure({
+      id: "f1",
+      name: "Stock Figure",
+      requiredColors: ["s1"],
+    })
+    const orderFigure = createFigure({
+      id: "f2",
+      name: "Order Figure",
+      requiredColors: ["s1"],
+    })
+    const stockQi = createQueueItem({
+      figureId: "f1",
+      type: "stock",
+      completedColors: [],
+    })
+    const orderQi = createQueueItem({
+      figureId: "f2",
+      type: "order",
+      completedColors: [],
+    })
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([
+        ["f1", stockFigure],
+        ["f2", orderFigure],
+      ]),
+      queueItems: new Map([
+        [stockQi.id, stockQi],
+        [orderQi.id, orderQi],
+      ]),
+    })
+
+    renderColorView()
+    fireEvent.click(await screen.findByTestId("color-ranking-entry"))
+
+    const names = screen.getAllByText(/Figure/)
+    const orderIndex = names.findIndex(
+      (el) => el.textContent === "Order Figure"
+    )
+    const stockIndex = names.findIndex(
+      (el) => el.textContent === "Stock Figure"
+    )
+    expect(orderIndex).toBeLessThan(stockIndex)
+  })
+
   it("keeps the disappearing entry open long enough to animate the completed row out", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({

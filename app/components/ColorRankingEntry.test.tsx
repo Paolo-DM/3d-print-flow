@@ -147,6 +147,92 @@ describe("ColorRankingEntry", () => {
     expect(screen.getByText("Order")).toBeTruthy()
   })
 
+  it("renders separator between order and stock items in expanded list", () => {
+    const entry = makeEntry({ count: 2, hasOrders: true })
+    const figure = createFigure({ id: "f1", name: "Stock Figure", requiredColors: ["s-white"] })
+    const figure2 = createFigure({ id: "f2", name: "Order Figure", requiredColors: ["s-white"] })
+    const stockQi = createQueueItem({ figureId: "f1", type: "stock", completedColors: [] })
+    const orderQi = createQueueItem({ figureId: "f2", type: "order", completedColors: [] })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure], ["f2", figure2]])}
+        queueItems={new Map([[stockQi.id, stockQi], [orderQi.id, orderQi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.getByTestId("order-stock-separator")).toBeTruthy()
+  })
+
+  it("does not render separator when all items are orders", () => {
+    const entry = makeEntry({ count: 2, hasOrders: true })
+    const figure = createFigure({ id: "f1", name: "Order A", requiredColors: ["s-white"] })
+    const figure2 = createFigure({ id: "f2", name: "Order B", requiredColors: ["s-white"] })
+    const qi1 = createQueueItem({ figureId: "f1", type: "order", completedColors: [] })
+    const qi2 = createQueueItem({ figureId: "f2", type: "order", completedColors: [] })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure], ["f2", figure2]])}
+        queueItems={new Map([[qi1.id, qi1], [qi2.id, qi2]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.queryByTestId("order-stock-separator")).toBeNull()
+  })
+
+  it("does not render separator when all items are stock", () => {
+    const entry = makeEntry({ count: 2 })
+    const figure = createFigure({ id: "f1", name: "Stock A", requiredColors: ["s-white"] })
+    const figure2 = createFigure({ id: "f2", name: "Stock B", requiredColors: ["s-white"] })
+    const qi1 = createQueueItem({ figureId: "f1", type: "stock", completedColors: [] })
+    const qi2 = createQueueItem({ figureId: "f2", type: "stock", completedColors: [] })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure], ["f2", figure2]])}
+        queueItems={new Map([[qi1.id, qi1], [qi2.id, qi2]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.queryByTestId("order-stock-separator")).toBeNull()
+  })
+
+  it("renders stock badge on stock items in expanded list", () => {
+    const entry = makeEntry({ count: 1 })
+    const figure = createFigure({ id: "f1", name: "Stock Figure", requiredColors: ["s-white"] })
+    const qi = createQueueItem({ figureId: "f1", type: "stock", completedColors: [] })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        queueItems={new Map([[qi.id, qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.getByText("Stock")).toBeTruthy()
+  })
+
   it("renders rank position with tabular-nums", () => {
     const entry = makeEntry()
     const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
