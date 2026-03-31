@@ -1,10 +1,18 @@
-import { Pencil, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { ListPlus, Pencil, Trash2 } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
+import { store } from "~/lib/store"
 import type { Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardHeader } from "~/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu"
 
 interface FigureCardProps {
   figure: Figure
@@ -14,9 +22,17 @@ interface FigureCardProps {
 }
 
 export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps) {
+  const [added, setAdded] = useState(false)
+
   const resolvedSpools = figure.requiredColors
     .map((id) => spools.get(id))
     .filter((s): s is Spool => s !== undefined)
+
+  function handleAddToQueue(type: "stock" | "order") {
+    store.getState().addToQueue(figure.id, type)
+    setAdded(true)
+    setTimeout(() => setAdded(false), 1500)
+  }
 
   return (
     <Card data-testid="figure-card">
@@ -29,30 +45,52 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
             ) : null}
             <p className="text-sm text-muted-foreground">{figure.size}%</p>
           </div>
-          {onEdit || onDelete ? (
-            <div className="flex gap-1">
-              {onEdit ? (
+          <div className="flex gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => onEdit(figure)}
-                  aria-label={`Edit ${figure.name}`}
+                  disabled={figure.requiredColors.length === 0}
+                  aria-label={`Add ${figure.name} to queue`}
                 >
-                  <Pencil />
+                  {added ? (
+                    <span className="text-xs font-medium">Added!</span>
+                  ) : (
+                    <ListPlus />
+                  )}
                 </Button>
-              ) : null}
-              {onDelete ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onDelete(figure)}
-                  aria-label={`Delete ${figure.name}`}
-                >
-                  <Trash2 />
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleAddToQueue("stock")}>
+                  Stock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleAddToQueue("order")}>
+                  Order
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {onEdit ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEdit(figure)}
+                aria-label={`Edit ${figure.name}`}
+              >
+                <Pencil />
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDelete(figure)}
+                aria-label={`Delete ${figure.name}`}
+              >
+                <Trash2 />
+              </Button>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
