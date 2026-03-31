@@ -2,7 +2,13 @@
 import { describe, expect, it } from "vitest"
 
 import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
-import { computeAffectedQueueItems, getReferencingFigures } from "~/lib/derived"
+import {
+  computeAffectedQueueItems,
+  computeColorRanking,
+  computeCompletionStatus,
+  computeFigureProgress,
+  getReferencingFigures,
+} from "~/lib/derived"
 
 describe("getReferencingFigures", () => {
   it("returns empty array when no figures reference the spool", () => {
@@ -77,5 +83,155 @@ describe("computeAffectedQueueItems", () => {
     const result = computeAffectedQueueItems("fig-1", new Map())
 
     expect(result).toEqual([])
+  })
+})
+
+describe("computeColorRanking", () => {
+  it("sorts by incomplete chip count descending", () => {
+    const s1 = createSpool({ id: "s1", name: "Red", hex: "#FF0000" })
+    const s2 = createSpool({ id: "s2", name: "Blue", hex: "#0000FF" })
+    const fig1 = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
+    const fig2 = createFigure({ id: "fig-2", requiredColors: ["s1"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: [] })
+    const q2 = createQueueItem({ id: "q2", figureId: "fig-2", completedColors: [] })
+
+    const spools = new Map([["s1", s1], ["s2", s2]])
+    const figures = new Map([["fig-1", fig1], ["fig-2", fig2]])
+    const queueItems = new Map([["q1", q1], ["q2", q2]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result[0].spool.id).toBe("s1")
+    expect(result[0].count).toBe(2)
+    expect(result[1].spool.id).toBe("s2")
+    expect(result[1].count).toBe(1)
+  })
+
+  it("excludes colors with zero incomplete chips", () => {
+    const s1 = createSpool({ id: "s1" })
+    const s2 = createSpool({ id: "s2" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: ["s1"] })
+
+    const spools = new Map([["s1", s1], ["s2", s2]])
+    const figures = new Map([["fig-1", fig]])
+    const queueItems = new Map([["q1", q1]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].spool.id).toBe("s2")
+  })
+
+  it("returns empty array for empty queue", () => {
+    const s1 = createSpool({ id: "s1" })
+    const spools = new Map([["s1", s1]])
+    const figures = new Map()
+    const queueItems = new Map()
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result).toEqual([])
+  })
+
+  it("tracks hasOrders when order-type queue items need the color", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", type: "order", completedColors: [] })
+
+    const spools = new Map([["s1", s1]])
+    const figures = new Map([["fig-1", fig]])
+    const queueItems = new Map([["q1", q1]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result[0].hasOrders).toBe(true)
+  })
+
+  it("excludes orphaned spool references not in spools Map", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1", "s-deleted"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: [] })
+
+    const spools = new Map([["s1", s1]])
+    const figures = new Map([["fig-1", fig]])
+    const queueItems = new Map([["q1", q1]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].spool.id).toBe("s1")
+  })
+
+  it("hasOrders is false when only stock-type queue items", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", type: "stock", completedColors: [] })
+
+    const spools = new Map([["s1", s1]])
+    const figures = new Map([["fig-1", fig]])
+    const queueItems = new Map([["q1", q1]])
+
+    const result = computeColorRanking(spools, figures, queueItems)
+
+    expect(result[0].hasOrders).toBe(false)
+  })
+})
+
+describe("computeFigureProgress", () => {
+  it("intersects completedColors with current requiredColors (stale entries ignored)", () => {
+    const qi = createQueueItem({
+      completedColors: ["s1", "s-stale"],
+    })
+    const fig = createFigure({ requiredColors: ["s1", "s2", "s3"] })
+
+    const result = computeFigureProgress(qi, fig)
+
+    expect(result).toEqual({ completed: 1, total: 3 })
+  })
+
+  it("returns { completed: 0, total: 0 } for null figure", () => {
+    const qi = createQueueItem({ completedColors: ["s1"] })
+
+    const result = computeFigureProgress(qi, null)
+
+    expect(result).toEqual({ completed: 0, total: 0 })
+  })
+
+  it("returns { completed: 0, total: 0 } for undefined figure", () => {
+    const qi = createQueueItem({ completedColors: ["s1"] })
+
+    const result = computeFigureProgress(qi, undefined)
+
+    expect(result).toEqual({ completed: 0, total: 0 })
+  })
+})
+
+describe("computeCompletionStatus", () => {
+  it("returns true only when all required colors are completed", () => {
+    const qi = createQueueItem({ completedColors: ["s1", "s2"] })
+    const fig = createFigure({ requiredColors: ["s1", "s2"] })
+
+    expect(computeCompletionStatus(qi, fig)).toBe(true)
+  })
+
+  it("returns false when not all required colors are completed", () => {
+    const qi = createQueueItem({ completedColors: ["s1"] })
+    const fig = createFigure({ requiredColors: ["s1", "s2"] })
+
+    expect(computeCompletionStatus(qi, fig)).toBe(false)
+  })
+
+  it("returns false for figure with zero requiredColors", () => {
+    const qi = createQueueItem({ completedColors: [] })
+    const fig = createFigure({ requiredColors: [] })
+
+    expect(computeCompletionStatus(qi, fig)).toBe(false)
+  })
+
+  it("returns false for null figure", () => {
+    const qi = createQueueItem({ completedColors: ["s1"] })
+
+    expect(computeCompletionStatus(qi, null)).toBe(false)
   })
 })

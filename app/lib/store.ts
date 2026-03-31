@@ -24,6 +24,10 @@ interface PrintFlowState {
   createFigure: (data: Omit<Figure, "id">) => void
   updateFigure: (id: string, updates: Partial<Omit<Figure, "id">>) => void
   deleteFigure: (id: string) => void
+  addToQueue: (figureId: string, type: "stock" | "order") => void
+  removeFromQueue: (id: string) => void
+  toggleChip: (queueItemId: string, spoolId: string) => void
+  requeueCompleted: (queueItemId: string) => void
 }
 
 export const store = createStore<PrintFlowState>((set) => ({
@@ -87,6 +91,55 @@ export const store = createStore<PrintFlowState>((set) => ({
         if (qi.figureId === id) nextQueue.delete(qid)
       }
       return { figures: nextFigures, queueItems: nextQueue }
+    })
+  },
+
+  addToQueue(figureId, type) {
+    set((state) => {
+      const id = crypto.randomUUID()
+      const next = new Map(state.queueItems)
+      next.set(id, { id, figureId, type, completedColors: [] })
+      return { queueItems: next }
+    })
+  },
+
+  removeFromQueue(id) {
+    set((state) => {
+      if (!state.queueItems.has(id)) return state
+      const next = new Map(state.queueItems)
+      next.delete(id)
+      return { queueItems: next }
+    })
+  },
+
+  toggleChip(queueItemId, spoolId) {
+    set((state) => {
+      const existing = state.queueItems.get(queueItemId)
+      if (!existing) return state
+      const completedColors = existing.completedColors.includes(spoolId)
+        ? existing.completedColors.filter((c) => c !== spoolId)
+        : [...existing.completedColors, spoolId]
+      const next = new Map(state.queueItems)
+      next.set(queueItemId, { ...existing, completedColors })
+      return { queueItems: next }
+    })
+  },
+
+  requeueCompleted(queueItemId) {
+    set((state) => {
+      const existing = state.queueItems.get(queueItemId)
+      if (!existing) return state
+      const figure = state.figures.get(existing.figureId)
+      if (!figure) return state
+      const id = crypto.randomUUID()
+      const next = new Map(state.queueItems)
+      next.set(id, {
+        id,
+        figureId: existing.figureId,
+        type: existing.type,
+        completedColors: [],
+      })
+      return { queueItems: next }
     })
   },
 }))

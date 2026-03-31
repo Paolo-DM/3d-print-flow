@@ -233,6 +233,121 @@ describe("store mutations", () => {
   })
 })
 
+describe("queue mutations", () => {
+  it("addToQueue creates a QueueItem with correct fields and UUID", () => {
+    store.getState().addToQueue("fig-1", "stock")
+    const items = store.getState().queueItems
+    expect(items.size).toBe(1)
+    const item = [...items.values()][0]
+    expect(item.id).toBeTruthy()
+    expect(item.figureId).toBe("fig-1")
+    expect(item.type).toBe("stock")
+    expect(item.completedColors).toEqual([])
+  })
+
+  it("addToQueue allows duplicate figureId entries", () => {
+    store.getState().addToQueue("fig-1", "stock")
+    store.getState().addToQueue("fig-1", "order")
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(2)
+    expect(items[0].figureId).toBe("fig-1")
+    expect(items[1].figureId).toBe("fig-1")
+    expect(items[0].id).not.toBe(items[1].id)
+  })
+
+  it("removeFromQueue removes the correct item", () => {
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+    const q2 = createQueueItem({ id: "q2", figureId: "fig-2" })
+    store.setState({
+      queueItems: new Map([
+        ["q1", q1],
+        ["q2", q2],
+      ]),
+    })
+    store.getState().removeFromQueue("q1")
+    expect(store.getState().queueItems.size).toBe(1)
+    expect(store.getState().queueItems.has("q1")).toBe(false)
+    expect(store.getState().queueItems.get("q2")).toEqual(q2)
+  })
+
+  it("removeFromQueue is no-op for non-existent ID", () => {
+    const q1 = createQueueItem({ id: "q1" })
+    store.setState({ queueItems: new Map([["q1", q1]]) })
+    const before = store.getState().queueItems
+    store.getState().removeFromQueue("nonexistent")
+    expect(store.getState().queueItems).toBe(before)
+  })
+
+  it("toggleChip adds spool ID to completedColors when absent", () => {
+    const q1 = createQueueItem({ id: "q1", completedColors: [] })
+    store.setState({ queueItems: new Map([["q1", q1]]) })
+    store.getState().toggleChip("q1", "spool-1")
+    expect(store.getState().queueItems.get("q1")?.completedColors).toEqual([
+      "spool-1",
+    ])
+  })
+
+  it("toggleChip removes spool ID from completedColors when present", () => {
+    const q1 = createQueueItem({
+      id: "q1",
+      completedColors: ["spool-1", "spool-2"],
+    })
+    store.setState({ queueItems: new Map([["q1", q1]]) })
+    store.getState().toggleChip("q1", "spool-1")
+    expect(store.getState().queueItems.get("q1")?.completedColors).toEqual([
+      "spool-2",
+    ])
+  })
+
+  it("toggleChip is no-op for non-existent queue item", () => {
+    const q1 = createQueueItem({ id: "q1" })
+    store.setState({ queueItems: new Map([["q1", q1]]) })
+    const before = store.getState().queueItems
+    store.getState().toggleChip("nonexistent", "spool-1")
+    expect(store.getState().queueItems).toBe(before)
+  })
+
+  it("requeueCompleted creates new queue item from catalog's current requiredColors with empty completedColors", () => {
+    const figure = createFigure({
+      id: "fig-1",
+      requiredColors: ["s1", "s2"],
+    })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      type: "order",
+      completedColors: ["s1", "s2"],
+    })
+    store.setState({
+      figures: new Map([["fig-1", figure]]),
+      queueItems: new Map([["q1", q1]]),
+    })
+    store.getState().requeueCompleted("q1")
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(2)
+    const newItem = items.find((i) => i.id !== "q1")!
+    expect(newItem.figureId).toBe("fig-1")
+    expect(newItem.type).toBe("order")
+    expect(newItem.completedColors).toEqual([])
+    // Original is NOT removed
+    expect(store.getState().queueItems.has("q1")).toBe(true)
+  })
+
+  it("requeueCompleted is no-op for non-existent queue item", () => {
+    const before = store.getState().queueItems
+    store.getState().requeueCompleted("nonexistent")
+    expect(store.getState().queueItems).toBe(before)
+  })
+
+  it("requeueCompleted is no-op when figure doesn't exist", () => {
+    const q1 = createQueueItem({ id: "q1", figureId: "fig-gone" })
+    store.setState({ queueItems: new Map([["q1", q1]]) })
+    const before = store.getState().queueItems
+    store.getState().requeueCompleted("q1")
+    expect(store.getState().queueItems).toBe(before)
+  })
+})
+
 describe("persistence flag", () => {
   it("_persist = true triggers writeStore on mutation", () => {
     setPersist(true)
