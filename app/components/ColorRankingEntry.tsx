@@ -62,11 +62,13 @@ export function ColorRankingEntry({
             {rank}
           </span>
           <span
-            className={cn("size-8 shrink-0 rounded-md", lightness > 0.85 && "border border-border", lightness < 0.15 && "dark:border dark:border-border")}
-            style={{
-              backgroundColor: entry.spool.hex,
-              boxShadow: `0 0 8px ${entry.spool.hex}40`,
-            }}
+            className={cn("size-8 shrink-0 rounded-md dark:[box-shadow:var(--swatch-glow)]", lightness > 0.85 && "border border-border", lightness < 0.15 && "dark:border dark:border-border")}
+            style={
+              {
+                backgroundColor: entry.spool.hex,
+                "--swatch-glow": `0 0 8px ${entry.spool.hex}40`,
+              } as React.CSSProperties
+            }
             data-testid="color-swatch"
           />
           <span className="min-w-0 flex-1">
