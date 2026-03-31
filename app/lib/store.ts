@@ -1,4 +1,5 @@
 import { createStore, useStore } from "zustand"
+import { toast } from "sonner"
 
 import { writeStore } from "~/lib/db"
 import { computeCompletionStatus } from "~/lib/derived"
@@ -166,13 +167,35 @@ export const store = createStore<PrintFlowState>((set) => ({
   },
 }))
 
+function showPersistenceError() {
+  toast.error("Changes saved in memory but not persisted", {
+    id: "persistence-failure",
+    duration: Infinity,
+    action: {
+      label: "Retry",
+      onClick: retryPersistence,
+    },
+  })
+}
+
+function retryPersistence() {
+  const { spools, figures, queueItems } = store.getState()
+  Promise.all([
+    writeStore("spools", spools),
+    writeStore("figures", figures),
+    writeStore("queueItems", queueItems),
+  ]).then(() => toast.dismiss("persistence-failure"), showPersistenceError)
+}
+
 // Subscribe callback for IndexedDB persistence
 store.subscribe((state, prevState) => {
   if (!_persist) return
-  if (state.spools !== prevState.spools) writeStore("spools", state.spools)
-  if (state.figures !== prevState.figures) writeStore("figures", state.figures)
+  if (state.spools !== prevState.spools)
+    writeStore("spools", state.spools).catch(showPersistenceError)
+  if (state.figures !== prevState.figures)
+    writeStore("figures", state.figures).catch(showPersistenceError)
   if (state.queueItems !== prevState.queueItems)
-    writeStore("queueItems", state.queueItems)
+    writeStore("queueItems", state.queueItems).catch(showPersistenceError)
 })
 
 // Serialization helpers

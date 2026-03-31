@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto"
 
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { toast } from "sonner"
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import * as db from "~/lib/db"
 import { fromJSON, getPersist, setPersist, store, toJSON } from "~/lib/store"
@@ -8,7 +9,14 @@ import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
 import type { QueueItem } from "~/lib/types"
 
 vi.mock("~/lib/db", () => ({
-  writeStore: vi.fn(),
+  writeStore: vi.fn(() => Promise.resolve()),
+}))
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }))
 
 function resetStore() {
@@ -19,6 +27,7 @@ function resetStore() {
   })
   setPersist(true)
   vi.clearAllMocks()
+  vi.mocked(db.writeStore).mockReturnValue(Promise.resolve())
 }
 
 afterEach(resetStore)
@@ -462,5 +471,111 @@ describe("serialization", () => {
     resetStore()
     fromJSON(json)
     expect(store.getState().spools.get(spool.id)).toEqual(spool)
+  })
+})
+
+describe("persistence failure notification", () => {
+  it("calls toast.error when writeStore rejects", async () => {
+    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.error).toHaveBeenCalledWith(
+      "Changes saved in memory but not persisted",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Retry" }),
+      })
+    )
+  })
+
+  it("toast uses fixed ID and duration: Infinity", async () => {
+    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        id: "persistence-failure",
+        duration: Infinity,
+      })
+    )
+  })
+
+  it("multi-store failures reuse the fixed toast ID", async () => {
+    const figure = createFigure({ id: "fig-1" })
+    const queueItem = createQueueItem({ id: "q1", figureId: figure.id })
+
+    setPersist(false)
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([[queueItem.id, queueItem]]),
+    })
+    setPersist(true)
+    vi.clearAllMocks()
+    vi.mocked(db.writeStore)
+      .mockRejectedValueOnce(new Error("IDB failure"))
+      .mockRejectedValueOnce(new Error("IDB failure"))
+
+    store.getState().deleteFigure(figure.id)
+
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2))
+    expect((toast.error as Mock).mock.calls).toEqual([
+      [
+        "Changes saved in memory but not persisted",
+        expect.objectContaining({ id: "persistence-failure" }),
+      ],
+      [
+        "Changes saved in memory but not persisted",
+        expect.objectContaining({ id: "persistence-failure" }),
+      ],
+    ])
+  })
+
+  it("retry success dismisses the toast", async () => {
+    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
+
+    // Reset mock so retry succeeds
+    vi.mocked(db.writeStore).mockResolvedValue(undefined)
+    const actionArg = (toast.error as Mock).mock.calls[0][1]
+    actionArg.action.onClick()
+    await vi.waitFor(() =>
+      expect(toast.dismiss).toHaveBeenCalledWith("persistence-failure")
+    )
+  })
+
+  it("retry failure shows the error toast again", async () => {
+    vi.mocked(db.writeStore)
+      .mockRejectedValueOnce(new Error("IDB failure")) // initial write
+      .mockRejectedValueOnce(new Error("IDB failure")) // retry: spools
+      .mockRejectedValueOnce(new Error("IDB failure")) // retry: figures
+      .mockRejectedValueOnce(new Error("IDB failure")) // retry: queueItems
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
+
+    const callCountBefore = (toast.error as Mock).mock.calls.length
+    const actionArg = (toast.error as Mock).mock.calls[0][1]
+    actionArg.action.onClick()
+    await vi.waitFor(() =>
+      expect((toast.error as Mock).mock.calls.length).toBeGreaterThan(
+        callCountBefore
+      )
+    )
+  })
+
+  it("successful writes produce no toast", async () => {
+    vi.mocked(db.writeStore).mockResolvedValue(undefined)
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it("_persist = false skips writes entirely", async () => {
+    setPersist(false)
+    vi.mocked(db.writeStore).mockRejectedValue(new Error("IDB failure"))
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(db.writeStore).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
   })
 })

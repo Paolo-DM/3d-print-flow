@@ -16,7 +16,7 @@ import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
 const mockReplaceAll = vi.fn()
 
 vi.mock("~/lib/db", () => ({
-  writeStore: vi.fn(),
+  writeStore: vi.fn(() => Promise.resolve()),
   replaceAll: (...args: unknown[]) => mockReplaceAll(...args),
 }))
 
