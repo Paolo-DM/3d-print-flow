@@ -140,7 +140,7 @@ describe("FigureCard", () => {
     const figure = createFigure({ name: "Empty", requiredColors: [] })
     render(<FigureCard figure={figure} spools={new Map()} />)
 
-    const btn = screen.getByRole("button", { name: "Add Empty to queue" })
+    const btn = screen.getByRole("button", { name: "Add Empty to queue" }) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
   })
 
