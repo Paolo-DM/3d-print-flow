@@ -58,8 +58,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 const pageTitles: Record<string, string> = {
-  "/": "Color View",
-  "/figures": "Figure View",
+  "/": "Queue",
+  "/figures": "Queue",
   "/catalog": "Figure Catalog",
   "/spools": "Filament Spools",
   "/completed": "Completed",

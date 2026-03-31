@@ -6,8 +6,7 @@ import {
   Disc3,
   Download,
   Layers,
-  LayoutGrid,
-  Palette,
+  LayoutDashboard,
   Upload,
 } from "lucide-react"
 
@@ -34,8 +33,7 @@ interface NavItem {
 }
 
 const queueItems: NavItem[] = [
-  { title: "Color View", path: "/", icon: Palette },
-  { title: "Figure View", path: "/figures", icon: LayoutGrid },
+  { title: "Queue", path: "/", icon: LayoutDashboard },
 ]
 
 const libraryItems: NavItem[] = [
@@ -87,13 +85,16 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Queue</SidebarGroupLabel>
           <SidebarMenu>
             {queueItems.map((item) => (
               <SidebarMenuItem key={item.path}>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === item.path}
+                  isActive={
+                    item.path === "/"
+                      ? pathname === "/" || pathname === "/figures"
+                      : pathname === item.path
+                  }
                   tooltip={item.title}
                 >
                   <NavLink to={item.path}>

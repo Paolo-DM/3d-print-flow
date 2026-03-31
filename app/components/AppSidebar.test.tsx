@@ -31,32 +31,39 @@ beforeAll(() => {
 
 afterEach(cleanup)
 
+function SidebarLayout() {
+  return (
+    <TooltipProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <div data-testid="outlet" />
+      </SidebarProvider>
+    </TooltipProvider>
+  )
+}
+
 function renderSidebar(initialPath = "/") {
   const Stub = createRoutesStub([
     {
       path: "/",
-      Component: () => (
-        <TooltipProvider>
-          <SidebarProvider>
-            <AppSidebar />
-          </SidebarProvider>
-        </TooltipProvider>
-      ),
+      Component: SidebarLayout,
+      children: [
+        { index: true, Component: () => <div>color view</div> },
+        { path: "figures", Component: () => <div>figures</div> },
+        { path: "catalog", Component: () => <div>catalog</div> },
+        { path: "spools", Component: () => <div>spools</div> },
+        { path: "completed", Component: () => <div>completed</div> },
+      ],
     },
-    { path: "/figures", Component: () => <div>figures</div> },
-    { path: "/catalog", Component: () => <div>catalog</div> },
-    { path: "/spools", Component: () => <div>spools</div> },
-    { path: "/completed", Component: () => <div>completed</div> },
   ])
 
   return render(<Stub initialEntries={[initialPath]} />)
 }
 
 describe("AppSidebar", () => {
-  it("renders all navigation section labels", () => {
+  it("renders Library and Archive section labels", () => {
     renderSidebar()
 
-    expect(screen.getByText("Queue")).toBeTruthy()
     expect(screen.getByText("Library")).toBeTruthy()
     expect(screen.getByText("Archive")).toBeTruthy()
   })
@@ -64,8 +71,7 @@ describe("AppSidebar", () => {
   it("renders all navigation items", () => {
     renderSidebar()
 
-    expect(screen.getByText("Color View")).toBeTruthy()
-    expect(screen.getByText("Figure View")).toBeTruthy()
+    expect(screen.getByText("Queue")).toBeTruthy()
     expect(screen.getByText("Figure Catalog")).toBeTruthy()
     expect(screen.getByText("Filament Spools")).toBeTruthy()
     expect(screen.getByText("Completed")).toBeTruthy()
@@ -89,27 +95,34 @@ describe("AppSidebar", () => {
     expect(exportData).toHaveBeenCalled()
   })
 
-  it("highlights active navigation item based on current route", () => {
+  it("highlights Queue item when on color view route", () => {
     renderSidebar("/")
 
-    const colorViewLink = screen.getByText("Color View").closest("a")
-    const menuButton = colorViewLink?.closest("[data-sidebar='menu-button']")
+    const queueLink = screen.getByText("Queue").closest("a")
+    const menuButton = queueLink?.closest("[data-sidebar='menu-button']")
     expect(menuButton?.getAttribute("data-active")).toBe("true")
   })
 
-  it("does not highlight inactive navigation items", () => {
-    renderSidebar("/")
+  it("highlights Queue item when on figure view route", () => {
+    renderSidebar("/figures")
 
-    const figureViewLink = screen.getByText("Figure View").closest("a")
-    const menuButton = figureViewLink?.closest("[data-sidebar='menu-button']")
+    const queueLink = screen.getByText("Queue").closest("a")
+    const menuButton = queueLink?.closest("[data-sidebar='menu-button']")
+    expect(menuButton?.getAttribute("data-active")).toBe("true")
+  })
+
+  it("does not highlight Queue item on unrelated routes", () => {
+    renderSidebar("/catalog")
+
+    const queueLink = screen.getByText("Queue").closest("a")
+    const menuButton = queueLink?.closest("[data-sidebar='menu-button']")
     expect(menuButton?.getAttribute("data-active")).toBe("false")
   })
 
   it("navigation items are links with correct paths", () => {
     renderSidebar()
 
-    expect(screen.getByText("Color View").closest("a")?.getAttribute("href")).toBe("/")
-    expect(screen.getByText("Figure View").closest("a")?.getAttribute("href")).toBe("/figures")
+    expect(screen.getByText("Queue").closest("a")?.getAttribute("href")).toBe("/")
     expect(screen.getByText("Figure Catalog").closest("a")?.getAttribute("href")).toBe("/catalog")
     expect(screen.getByText("Filament Spools").closest("a")?.getAttribute("href")).toBe("/spools")
     expect(screen.getByText("Completed").closest("a")?.getAttribute("href")).toBe("/completed")
