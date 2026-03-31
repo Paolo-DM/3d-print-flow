@@ -79,10 +79,10 @@ describe("QueueLayout", () => {
 
     renderQueue()
 
-    expect(await screen.findByText("Queued figures")).toBeTruthy()
-    expect(screen.getByText("Colors needed")).toBeTruthy()
-    expect(screen.getByText("Orders pending")).toBeTruthy()
-    expect(screen.getByText("Completed today")).toBeTruthy()
+    expect(await screen.findByText("In Queue")).toBeTruthy()
+    expect(screen.getByText("Colors Left")).toBeTruthy()
+    expect(screen.getByText("Orders")).toBeTruthy()
+    expect(screen.getByText("Done Today")).toBeTruthy()
   })
 
   it("renders tabs with Color View and Figure View", async () => {
@@ -141,7 +141,7 @@ describe("QueueLayout", () => {
 
     renderQueue()
 
-    const label = await screen.findByText("Completed today")
+    const label = await screen.findByText("Done Today")
     const card = label.closest("[data-slot='card']") as HTMLElement
     expect(card).toBeTruthy()
     expect(within(card).getByText("1")).toBeTruthy()

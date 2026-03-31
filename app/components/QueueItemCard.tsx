@@ -51,7 +51,7 @@ export function QueueItemCard({
   return (
     <div
       className={cn(
-        "space-y-2 rounded-md border p-3",
+        "flex flex-col gap-2 rounded-lg border p-3 shadow-sm transition-shadow duration-200 hover:shadow",
         completionPhase === "pulsing" && "animate-completion-pulse",
         completionPhase === "collapsing" &&
           "animate-completion-collapse overflow-hidden",
@@ -65,9 +65,9 @@ export function QueueItemCard({
     >
       <div className="flex items-baseline justify-between gap-2">
         <div>
-          <p className="text-sm font-medium">{figure.name}</p>
+          <p className="truncate text-sm font-medium">{figure.name}</p>
           {figure.franchise ? (
-            <p className="text-xs text-muted-foreground">{figure.franchise}</p>
+            <p className="truncate text-xs text-muted-foreground">{figure.franchise}</p>
           ) : null}
         </div>
         <div className="flex items-center gap-1">
@@ -135,7 +135,7 @@ export function QueueItemCard({
           {missingSpoolCount === 1 ? "" : "s"} for this figure.
         </p>
       ) : null}
-      <div className="flex items-center gap-2">
+      <div className="mt-auto flex items-center gap-2">
         <Progress value={percentage} className="flex-1" />
         <span className="text-xs text-muted-foreground tabular-nums">
           {progress.completed}/{progress.total}

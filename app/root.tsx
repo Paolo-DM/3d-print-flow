@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   data,
   isRouteErrorResponse,
+  useLocation,
   useRouteLoaderData,
 } from "react-router"
 
@@ -56,18 +57,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
+const pageTitles: Record<string, string> = {
+  "/": "Color View",
+  "/figures": "Figure View",
+  "/catalog": "Figure Catalog",
+  "/spools": "Filament Spools",
+  "/completed": "Completed",
+}
+
 export default function App() {
+  const { pathname } = useLocation()
+
   useEffect(() => {
     initApp()
   }, [])
+
+  const pageTitle = pageTitles[pathname] ?? ""
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          <header className="flex h-12 items-center gap-2 border-b px-4">
+          <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b bg-background/80 px-4 shadow-sm backdrop-blur-sm">
             <SidebarTrigger />
+            {pageTitle ? (
+              <h1 className="text-sm font-semibold text-foreground">
+                {pageTitle}
+              </h1>
+            ) : null}
           </header>
           <Outlet />
         </SidebarInset>

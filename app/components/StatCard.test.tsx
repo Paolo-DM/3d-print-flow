@@ -21,13 +21,13 @@ describe("StatCard", () => {
     expect(value.className).toContain("tabular-nums")
   })
 
-  it("applies custom className", () => {
+  it("applies accent styling via border and text color", () => {
     const { container } = render(
-      <StatCard label="Orders" value={3} className="text-orange-600" />,
+      <StatCard label="Orders" value={3} accent="orders" />,
     )
 
-    const card = container.querySelector("[data-slot='card']")
-    expect(card?.className).toContain("text-orange-600")
+    const card = container.querySelector("[data-slot='card']") as HTMLElement
+    expect(card?.style.borderLeftColor).toBe("var(--stat-orders)")
   })
 
   it("renders zero value correctly", () => {

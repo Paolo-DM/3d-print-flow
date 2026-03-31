@@ -157,7 +157,7 @@ export default function FigureView() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {visibleItems.map((qi) => {
         const figure = figures.get(qi.figureId)
         if (!figure) return null

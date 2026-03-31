@@ -167,7 +167,7 @@ export default function Completed() {
 
   return (
     <div className="p-4 lg:p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Completed</h1>
+      <h1 className="mb-4 text-2xl font-bold">Completed</h1>
 
       {completedItems.length === 0 ? (
         <Empty>
@@ -182,7 +182,7 @@ export default function Completed() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="space-y-3">
+        <div className="animate-fade-in-up space-y-3">
           {completedItems.map((qi) => {
             const figure = figures.get(qi.figureId)
             if (!figure) return null

@@ -114,10 +114,10 @@ export function ColorRankingEntry({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-muted/50"
+          className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-all duration-200 hover:bg-muted/60"
           data-testid="color-ranking-entry"
         >
-          <span className="w-6 text-center text-sm text-muted-foreground tabular-nums">
+          <span className="w-6 text-center text-base font-bold text-muted-foreground tabular-nums">
             {rank}
           </span>
           <span
@@ -135,9 +135,9 @@ export function ColorRankingEntry({
             data-testid="color-swatch"
           />
           <span className="min-w-0 flex-1">
-            <span className="text-sm font-semibold">{entry.spool.name}</span>
+            <span className="text-base font-semibold">{entry.spool.name}</span>
           </span>
-          <span className="hidden text-xs text-muted-foreground sm:inline">
+          <span className="text-xs text-muted-foreground">
             figures
           </span>
           {entry.hasOrders ? (
@@ -145,7 +145,7 @@ export function ColorRankingEntry({
               Order
             </Badge>
           ) : null}
-          <span className="min-w-[2ch] text-right text-2xl font-bold tabular-nums">
+          <span className="min-w-[2ch] text-right text-3xl font-extrabold tabular-nums">
             {entry.count}
           </span>
           <ChevronDown
@@ -157,7 +157,7 @@ export function ColorRankingEntry({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="space-y-3 pt-1 pr-3 pb-3 pl-9">
+        <div className="animate-fade-in-up space-y-3 pt-1 pr-3 pb-3 pl-9">
           {matchingItems.map((qi, index) => {
             const figure = figures.get(qi.figureId)
             if (!figure) return null
@@ -174,7 +174,7 @@ export function ColorRankingEntry({
                 )}
                 <div
                   className={cn(
-                    "space-y-2 rounded-md border p-3",
+                    "space-y-2 rounded-lg border p-3 transition-colors duration-150 hover:border-primary/20",
                     phase === "pulsing" && "animate-completion-pulse",
                     phase === "collapsing" &&
                       "animate-completion-collapse overflow-hidden"
@@ -195,10 +195,10 @@ export function ColorRankingEntry({
                   }
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">{figure.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{figure.name}</p>
                       {figure.franchise ? (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {figure.franchise}
                         </p>
                       ) : null}

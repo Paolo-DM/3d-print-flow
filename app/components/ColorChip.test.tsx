@@ -37,7 +37,7 @@ describe("ColorChip", () => {
     )
 
     const chip = container.firstElementChild as HTMLElement
-    expect(chip.className).toContain("animate-pulse")
+    expect(chip.className).toContain("animate-[pulse_2s_ease-in-out_infinite]")
     expect(chip.className).toContain("ring-2")
   })
 

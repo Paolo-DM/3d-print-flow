@@ -41,18 +41,14 @@ export default function QueueLayout() {
 
   return (
     <div className="p-4 lg:p-6">
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Queued figures" value={queuedFigures} />
-        <StatCard label="Colors needed" value={ranking.length} />
+      <div className="mb-4 grid animate-fade-in-up grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="In Queue" value={queuedFigures} accent="queue" />
+        <StatCard label="Colors Left" value={ranking.length} accent="colors" />
+        <StatCard label="Orders" value={ordersPending} accent="orders" />
         <StatCard
-          label="Orders pending"
-          value={ordersPending}
-          className="text-orange-600 dark:text-orange-400"
-        />
-        <StatCard
-          label="Completed today"
+          label="Done Today"
           value={completedTodayCount}
-          className="text-primary"
+          accent="completed"
         />
       </div>
 

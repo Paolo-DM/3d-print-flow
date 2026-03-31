@@ -108,7 +108,7 @@ export default function FigureCatalog() {
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Figure Catalog</h1>
+        <h1 className="text-2xl font-bold">Figure Catalog</h1>
         <Button onClick={handleAddFigure}>Add Figure</Button>
       </div>
 
@@ -126,7 +126,7 @@ export default function FigureCatalog() {
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+        <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
           {figureList.map((figure) => (
             <FigureCard
               key={figure.id}

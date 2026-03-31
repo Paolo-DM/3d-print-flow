@@ -208,19 +208,24 @@ export default function ColorView() {
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {ranking.map((entry, index) => (
-        <ColorRankingEntry
+        <div
           key={entry.spool.id}
-          entry={entry}
-          rank={index + 1}
-          figures={figures}
-          queueItems={queueItems}
-          spools={spools}
-          currentSpoolId={entry.spool.id}
-          open={openEntries.has(entry.spool.id)}
-          onOpenChange={(open) => setEntryOpen(entry.spool.id, open)}
-        />
+          className="animate-fade-in-up"
+          style={{ animationDelay: `${index * 50}ms` }}
+        >
+          <ColorRankingEntry
+            entry={entry}
+            rank={index + 1}
+            figures={figures}
+            queueItems={queueItems}
+            spools={spools}
+            currentSpoolId={entry.spool.id}
+            open={openEntries.has(entry.spool.id)}
+            onOpenChange={(open) => setEntryOpen(entry.spool.id, open)}
+          />
+        </div>
       ))}
       {Array.from(completingEntriesRef.current).map(([spoolId, snapshot]) => {
         if (currentRankingIds.has(spoolId)) return null

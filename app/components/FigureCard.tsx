@@ -41,13 +41,13 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
   }
 
   return (
-    <Card data-testid="figure-card">
+    <Card data-testid="figure-card" className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex flex-col gap-1">
-            <p className="text-lg font-semibold">{figure.name}</p>
+            <p className="truncate text-lg font-bold">{figure.name}</p>
             {figure.franchise ? (
-              <p className="text-sm text-muted-foreground">{figure.franchise}</p>
+              <p className="truncate text-sm text-muted-foreground">{figure.franchise}</p>
             ) : null}
             <p className="text-sm text-muted-foreground">{figure.size}%</p>
           </div>
@@ -103,7 +103,7 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
         {resolvedSpools.length === 0 ? (
           <p className="text-sm text-muted-foreground">No colors assigned</p>
         ) : (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             {resolvedSpools.map((spool) => {
               const lightness = getPerceivedLightness(spool.hex)
               return (

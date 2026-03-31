@@ -5,6 +5,7 @@ import {
   CheckCircle,
   Disc3,
   Download,
+  Layers,
   LayoutGrid,
   Palette,
   Upload,
@@ -19,6 +20,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -75,6 +77,14 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="flex items-center gap-2 px-2 py-1">
+          <Layers className="size-5 shrink-0 text-primary" />
+          <span className="font-heading text-sm font-bold tracking-tight group-data-[collapsible=icon]:hidden">
+            PrintFlow
+          </span>
+        </div>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Queue</SidebarGroupLabel>

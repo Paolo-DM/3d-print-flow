@@ -72,8 +72,8 @@ development_status:
   epic-3-retrospective: optional
 
   # Epic 4: Data Portability & Error Resilience
-  epic-4: in-progress
+  epic-4: done
   4-1-json-export: done
   4-2-json-import-with-atomic-replace: done
-  4-3-persistence-failure-notification-with-retry: review
+  4-3-persistence-failure-notification-with-retry: done
   epic-4-retrospective: optional

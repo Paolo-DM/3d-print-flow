@@ -16,18 +16,23 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
   const lightness = getPerceivedLightness(spool.hex)
 
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <CardContent className="flex items-center gap-3">
         <div
           className={cn(
-            "size-12 shrink-0 rounded-md",
+            "size-12 shrink-0 rounded-lg dark:[box-shadow:var(--spool-glow)]",
             lightness > 0.85 && "border border-border",
             lightness < 0.15 && "dark:border dark:border-border"
           )}
-          style={{ backgroundColor: spool.hex }}
+          style={
+            {
+              backgroundColor: spool.hex,
+              "--spool-glow": `0 0 10px ${spool.hex}30`,
+            } as React.CSSProperties
+          }
           data-testid="spool-swatch"
         />
-        <span className="flex-1 text-sm font-medium text-foreground">
+        <span className="flex-1 text-sm font-semibold text-foreground">
           {spool.name}
         </span>
         <div className="flex gap-1">

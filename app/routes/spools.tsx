@@ -100,7 +100,7 @@ export default function SpoolLibrary() {
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Spool Library</h1>
+        <h1 className="text-2xl font-bold">Spool Library</h1>
         <Button onClick={handleAddSpool}>Add Spool</Button>
       </div>
 
@@ -120,7 +120,7 @@ export default function SpoolLibrary() {
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+        <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
           {spoolList.map((spool) => (
             <SpoolCard key={spool.id} spool={spool} onEdit={handleEditSpool} onDelete={handleDeleteSpool} />
           ))}
