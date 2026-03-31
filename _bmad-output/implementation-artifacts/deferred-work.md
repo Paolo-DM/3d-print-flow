@@ -40,3 +40,8 @@
 
 - **`deleteFigure` always creates new `queueItems` Map** — Even when no queue items reference the deleted figure, a new Map is allocated and returned, causing unnecessary subscriber notifications and IndexedDB writes. Pre-existing in store.ts.
 - **`getPerceivedLightness` produces NaN for non-standard hex strings** — `parseInt` returns NaN for 3-digit shorthand hex or malformed strings, silently disabling border logic and glow effects. Pre-existing in color-utils.ts. Previously deferred in stories 1.3 and 1.4.
+
+## Deferred from: code review of cookie-dark-mode-toggle (2026-03-31)
+
+- **Theme cookie missing `secure` flag** — `themeCookie` omits `secure: true`, so on HTTPS deployments the cookie is also sent over plain HTTP. Low risk since it's only a UI preference, not a session token. Add conditionally based on environment when deploying to production.
+- **No unit tests for cookie-based theme logic** — Old `dark-mode.test.ts` was deleted (tested the removed inline script). Server-side `parseTheme` logic, the action route, and the toggle component have no test coverage. Consider adding tests for the cookie parse/serialize round-trip and action validation.

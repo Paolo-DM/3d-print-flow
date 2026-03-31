@@ -12,6 +12,7 @@ import {
 
 import { exportData } from "~/lib/export-import"
 import { ImportDialog } from "~/components/ImportDialog"
+import { ThemeToggle } from "~/components/ThemeToggle"
 import {
   Sidebar,
   SidebarContent,
@@ -140,6 +141,9 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <ThemeToggle />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton tooltip="Export" onClick={exportData}>
               <Download />

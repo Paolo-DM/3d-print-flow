@@ -5,7 +5,9 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  data,
   isRouteErrorResponse,
+  useRouteLoaderData,
 } from "react-router"
 
 import type { Route } from "./+types/root"
@@ -18,23 +20,30 @@ import {
 } from "~/components/ui/sidebar"
 import { TooltipProvider } from "~/components/ui/tooltip"
 import { initApp } from "~/lib/init"
+import { type Theme, themeCookie } from "~/lib/theme.server"
 import "./app.css"
 
-const darkModeScript = `
-(function() {
-  var theme = localStorage.getItem("theme");
-  var isDark = theme === "" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  if (isDark) document.documentElement.classList.add("dark");
-})();
-`
+export async function loader({ request }: Route.LoaderArgs) {
+  const raw = await themeCookie.parse(request.headers.get("Cookie"))
+  const theme: Theme = raw === "light" ? "light" : "dark"
+
+  const headers: HeadersInit = {}
+  if (raw !== theme) {
+    headers["Set-Cookie"] = await themeCookie.serialize(theme)
+  }
+
+  return data({ theme }, { headers })
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const loaderData = useRouteLoaderData<typeof loader>("root")
+  const theme: Theme = loaderData?.theme ?? "dark"
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script dangerouslySetInnerHTML={{ __html: darkModeScript }} />
         <Meta />
         <Links />
       </head>

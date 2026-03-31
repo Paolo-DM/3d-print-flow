@@ -8,4 +8,5 @@ export default [
   route("catalog", "routes/catalog.tsx"),
   route("spools", "routes/spools.tsx"),
   route("completed", "routes/completed.tsx"),
+  route("action/set-theme", "routes/action.set-theme.ts"),
 ] satisfies RouteConfig
