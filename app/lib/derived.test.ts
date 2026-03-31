@@ -8,6 +8,7 @@ import {
   computeCompletionStatus,
   computeFigureProgress,
   getReferencingFigures,
+  isCompletedToday,
 } from "~/lib/derived"
 
 describe("getReferencingFigures", () => {
@@ -63,7 +64,11 @@ describe("computeAffectedQueueItems", () => {
     const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
     const q2 = createQueueItem({ id: "q2", figureId: "fig-1" })
     const q3 = createQueueItem({ id: "q3", figureId: "fig-2" })
-    const queueItems = new Map([["q1", q1], ["q2", q2], ["q3", q3]])
+    const queueItems = new Map([
+      ["q1", q1],
+      ["q2", q2],
+      ["q3", q3],
+    ])
 
     const result = computeAffectedQueueItems("fig-1", queueItems)
 
@@ -92,12 +97,29 @@ describe("computeColorRanking", () => {
     const s2 = createSpool({ id: "s2", name: "Blue", hex: "#0000FF" })
     const fig1 = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
     const fig2 = createFigure({ id: "fig-2", requiredColors: ["s1"] })
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: [] })
-    const q2 = createQueueItem({ id: "q2", figureId: "fig-2", completedColors: [] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      completedColors: [],
+    })
+    const q2 = createQueueItem({
+      id: "q2",
+      figureId: "fig-2",
+      completedColors: [],
+    })
 
-    const spools = new Map([["s1", s1], ["s2", s2]])
-    const figures = new Map([["fig-1", fig1], ["fig-2", fig2]])
-    const queueItems = new Map([["q1", q1], ["q2", q2]])
+    const spools = new Map([
+      ["s1", s1],
+      ["s2", s2],
+    ])
+    const figures = new Map([
+      ["fig-1", fig1],
+      ["fig-2", fig2],
+    ])
+    const queueItems = new Map([
+      ["q1", q1],
+      ["q2", q2],
+    ])
 
     const result = computeColorRanking(spools, figures, queueItems)
 
@@ -111,9 +133,16 @@ describe("computeColorRanking", () => {
     const s1 = createSpool({ id: "s1" })
     const s2 = createSpool({ id: "s2" })
     const fig = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: ["s1"] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      completedColors: ["s1"],
+    })
 
-    const spools = new Map([["s1", s1], ["s2", s2]])
+    const spools = new Map([
+      ["s1", s1],
+      ["s2", s2],
+    ])
     const figures = new Map([["fig-1", fig]])
     const queueItems = new Map([["q1", q1]])
 
@@ -137,7 +166,12 @@ describe("computeColorRanking", () => {
   it("tracks hasOrders when order-type queue items need the color", () => {
     const s1 = createSpool({ id: "s1" })
     const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", type: "order", completedColors: [] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      type: "order",
+      completedColors: [],
+    })
 
     const spools = new Map([["s1", s1]])
     const figures = new Map([["fig-1", fig]])
@@ -150,8 +184,15 @@ describe("computeColorRanking", () => {
 
   it("excludes orphaned spool references not in spools Map", () => {
     const s1 = createSpool({ id: "s1" })
-    const fig = createFigure({ id: "fig-1", requiredColors: ["s1", "s-deleted"] })
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", completedColors: [] })
+    const fig = createFigure({
+      id: "fig-1",
+      requiredColors: ["s1", "s-deleted"],
+    })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      completedColors: [],
+    })
 
     const spools = new Map([["s1", s1]])
     const figures = new Map([["fig-1", fig]])
@@ -166,7 +207,12 @@ describe("computeColorRanking", () => {
   it("hasOrders is false when only stock-type queue items", () => {
     const s1 = createSpool({ id: "s1" })
     const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1", type: "stock", completedColors: [] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      type: "stock",
+      completedColors: [],
+    })
 
     const spools = new Map([["s1", s1]])
     const figures = new Map([["fig-1", fig]])
@@ -233,5 +279,29 @@ describe("computeCompletionStatus", () => {
     const qi = createQueueItem({ completedColors: ["s1"] })
 
     expect(computeCompletionStatus(qi, null)).toBe(false)
+  })
+})
+
+describe("isCompletedToday", () => {
+  it("returns true when completedAt is on the same local day", () => {
+    const qi = createQueueItem({
+      completedAt: new Date(2026, 2, 31, 8, 30).toISOString(),
+    })
+
+    expect(isCompletedToday(qi, new Date(2026, 2, 31, 18, 0))).toBe(true)
+  })
+
+  it("returns false when completedAt is on a different day", () => {
+    const qi = createQueueItem({
+      completedAt: new Date(2026, 2, 30, 8, 30).toISOString(),
+    })
+
+    expect(isCompletedToday(qi, new Date(2026, 2, 31, 18, 0))).toBe(false)
+  })
+
+  it("returns false when completedAt is null", () => {
+    const qi = createQueueItem({ completedAt: null })
+
+    expect(isCompletedToday(qi, new Date(2026, 2, 31, 18, 0))).toBe(false)
   })
 })

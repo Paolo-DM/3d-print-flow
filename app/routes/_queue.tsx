@@ -4,6 +4,7 @@ import { usePrintFlowStore } from "~/lib/store"
 import {
   computeColorRanking,
   computeCompletionStatus,
+  isCompletedToday,
 } from "~/lib/derived"
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs"
 import { StatCard } from "~/components/StatCard"
@@ -18,7 +19,10 @@ export default function QueueLayout() {
   const ranking = computeColorRanking(spools, figures, queueItems)
 
   const completedCount = Array.from(queueItems.values()).filter((qi) =>
-    computeCompletionStatus(qi, figures.get(qi.figureId)),
+    computeCompletionStatus(qi, figures.get(qi.figureId))
+  ).length
+  const completedTodayCount = Array.from(queueItems.values()).filter((qi) =>
+    isCompletedToday(qi)
   ).length
 
   const ordersPending = Array.from(queueItems.values()).filter((qi) => {
@@ -46,8 +50,8 @@ export default function QueueLayout() {
           className="text-orange-600 dark:text-orange-400"
         />
         <StatCard
-          label="Completed"
-          value={completedCount}
+          label="Completed today"
+          value={completedTodayCount}
           className="text-primary"
         />
       </div>

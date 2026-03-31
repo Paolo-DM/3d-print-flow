@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import * as db from "~/lib/db"
 import { fromJSON, getPersist, setPersist, store, toJSON } from "~/lib/store"
 import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import type { QueueItem } from "~/lib/types"
 
 vi.mock("~/lib/db", () => ({
   writeStore: vi.fn(),
@@ -91,38 +92,32 @@ describe("store mutations", () => {
   })
 
   it("createFigure generates a unique UUID", () => {
-    store
-      .getState()
-      .createFigure({
-        name: "Naruto",
-        franchise: "",
-        size: 60,
-        notes: "",
-        requiredColors: [],
-      })
-    store
-      .getState()
-      .createFigure({
-        name: "Goku",
-        franchise: "",
-        size: 60,
-        notes: "",
-        requiredColors: [],
-      })
+    store.getState().createFigure({
+      name: "Naruto",
+      franchise: "",
+      size: 60,
+      notes: "",
+      requiredColors: [],
+    })
+    store.getState().createFigure({
+      name: "Goku",
+      franchise: "",
+      size: 60,
+      notes: "",
+      requiredColors: [],
+    })
     const ids = [...store.getState().figures.values()].map((f) => f.id)
     expect(ids[0]).not.toBe(ids[1])
   })
 
   it("updateFigure modifies name, franchise, size, notes, and requiredColors", () => {
-    store
-      .getState()
-      .createFigure({
-        name: "Naruto",
-        franchise: "Naruto",
-        size: 60,
-        notes: "",
-        requiredColors: [],
-      })
+    store.getState().createFigure({
+      name: "Naruto",
+      franchise: "Naruto",
+      size: 60,
+      notes: "",
+      requiredColors: [],
+    })
     const id = [...store.getState().figures.keys()][0]
     store.getState().updateFigure(id, {
       name: "Naruto Uzumaki",
@@ -140,15 +135,13 @@ describe("store mutations", () => {
   })
 
   it("updateFigure is a no-op for unknown id", () => {
-    store
-      .getState()
-      .createFigure({
-        name: "Naruto",
-        franchise: "",
-        size: 60,
-        notes: "",
-        requiredColors: [],
-      })
+    store.getState().createFigure({
+      name: "Naruto",
+      franchise: "",
+      size: 60,
+      notes: "",
+      requiredColors: [],
+    })
     const before = store.getState().figures
     store.getState().updateFigure("nonexistent", { name: "X" })
     expect(store.getState().figures).toBe(before)
@@ -243,6 +236,7 @@ describe("queue mutations", () => {
     expect(item.figureId).toBe("fig-1")
     expect(item.type).toBe("stock")
     expect(item.completedColors).toEqual([])
+    expect(item.completedAt).toBeNull()
   })
 
   it("addToQueue allows duplicate figureId entries", () => {
@@ -307,6 +301,51 @@ describe("queue mutations", () => {
     expect(store.getState().queueItems).toBe(before)
   })
 
+  it("toggleChip stamps completedAt when an item becomes complete", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-03-31T12:00:00.000Z"))
+
+    const figure = createFigure({ id: "fig-1", requiredColors: ["spool-1"] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      completedColors: [],
+      completedAt: null,
+    })
+
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([["q1", q1]]),
+    })
+
+    store.getState().toggleChip("q1", "spool-1")
+
+    expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
+      "2026-03-31T12:00:00.000Z"
+    )
+
+    vi.useRealTimers()
+  })
+
+  it("toggleChip clears completedAt when a completed item becomes incomplete", () => {
+    const figure = createFigure({ id: "fig-1", requiredColors: ["spool-1"] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      completedColors: ["spool-1"],
+      completedAt: "2026-03-31T12:00:00.000Z",
+    })
+
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([["q1", q1]]),
+    })
+
+    store.getState().toggleChip("q1", "spool-1")
+
+    expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
+  })
+
   it("requeueCompleted creates new queue item from catalog's current requiredColors with empty completedColors", () => {
     const figure = createFigure({
       id: "fig-1",
@@ -329,6 +368,7 @@ describe("queue mutations", () => {
     expect(newItem.figureId).toBe("fig-1")
     expect(newItem.type).toBe("order")
     expect(newItem.completedColors).toEqual([])
+    expect(newItem.completedAt).toBeNull()
     // Original is NOT removed
     expect(store.getState().queueItems.has("q1")).toBe(true)
   })
@@ -391,6 +431,28 @@ describe("serialization", () => {
     expect(store.getState().spools.get(spool.id)).toEqual(spool)
     expect(store.getState().figures.get(figure.id)).toEqual(figure)
     expect(store.getState().queueItems.get(queueItem.id)).toEqual(queueItem)
+  })
+
+  it("fromJSON backfills missing completedAt values for older queue items", () => {
+    const figure = createFigure()
+    const legacyQueueItem: Omit<QueueItem, "completedAt"> = {
+      id: "q1",
+      figureId: figure.id,
+      type: "stock",
+      completedColors: [],
+    }
+
+    fromJSON({
+      spools: {},
+      figures: { [figure.id]: figure },
+      queueItems: {
+        [legacyQueueItem.id]: legacyQueueItem as unknown as QueueItem,
+      },
+    })
+
+    expect(
+      store.getState().queueItems.get(legacyQueueItem.id)?.completedAt
+    ).toBeNull()
   })
 
   it("toJSON → fromJSON roundtrip preserves data", () => {

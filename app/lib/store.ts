@@ -1,6 +1,7 @@
 import { createStore, useStore } from "zustand"
 
 import { writeStore } from "~/lib/db"
+import { computeCompletionStatus } from "~/lib/derived"
 import type { Figure, QueueItem, Spool } from "~/lib/types"
 
 // Module-level flag — NOT in store state (avoids re-renders)
@@ -98,7 +99,13 @@ export const store = createStore<PrintFlowState>((set) => ({
     set((state) => {
       const id = crypto.randomUUID()
       const next = new Map(state.queueItems)
-      next.set(id, { id, figureId, type, completedColors: [] })
+      next.set(id, {
+        id,
+        figureId,
+        type,
+        completedColors: [],
+        completedAt: null,
+      })
       return { queueItems: next }
     })
   },
@@ -116,11 +123,25 @@ export const store = createStore<PrintFlowState>((set) => ({
     set((state) => {
       const existing = state.queueItems.get(queueItemId)
       if (!existing) return state
+      const figure = state.figures.get(existing.figureId)
       const completedColors = existing.completedColors.includes(spoolId)
         ? existing.completedColors.filter((c) => c !== spoolId)
         : [...existing.completedColors, spoolId]
+      const previousItem = existing
+      const nextItem = {
+        ...existing,
+        completedColors,
+      }
+      const wasComplete = computeCompletionStatus(previousItem, figure)
+      const isComplete = computeCompletionStatus(nextItem, figure)
+      const completedAt =
+        !wasComplete && isComplete
+          ? new Date().toISOString()
+          : wasComplete && !isComplete
+            ? null
+            : existing.completedAt
       const next = new Map(state.queueItems)
-      next.set(queueItemId, { ...existing, completedColors })
+      next.set(queueItemId, { ...nextItem, completedAt })
       return { queueItems: next }
     })
   },
@@ -138,6 +159,7 @@ export const store = createStore<PrintFlowState>((set) => ({
         figureId: existing.figureId,
         type: existing.type,
         completedColors: [],
+        completedAt: null,
       })
       return { queueItems: next }
     })
@@ -168,10 +190,20 @@ export function fromJSON(data: {
   figures: Record<string, Figure>
   queueItems: Record<string, QueueItem>
 }) {
+  const queueItems = new Map(
+    Object.entries(data.queueItems).map(([id, queueItem]) => [
+      id,
+      {
+        ...queueItem,
+        completedAt: queueItem.completedAt ?? null,
+      },
+    ])
+  )
+
   store.setState({
     spools: new Map(Object.entries(data.spools)),
     figures: new Map(Object.entries(data.figures)),
-    queueItems: new Map(Object.entries(data.queueItems)),
+    queueItems,
   })
 }
 

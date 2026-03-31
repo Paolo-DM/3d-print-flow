@@ -22,17 +22,17 @@ export function getReferencingFigures(
 
 export function computeAffectedQueueItems(
   figureId: string,
-  queueItems: Map<string, QueueItem>,
+  queueItems: Map<string, QueueItem>
 ): QueueItem[] {
   return Array.from(queueItems.values()).filter(
-    (qi) => qi.figureId === figureId,
+    (qi) => qi.figureId === figureId
   )
 }
 
 export function computeColorRanking(
   spools: Map<string, Spool>,
   figures: Map<string, Figure>,
-  queueItems: Map<string, QueueItem>,
+  queueItems: Map<string, QueueItem>
 ): ColorRankingEntry[] {
   const counts = new Map<string, number>()
   const orderFlags = new Map<string, boolean>()
@@ -59,20 +59,34 @@ export function computeColorRanking(
 
 export function computeFigureProgress(
   queueItem: QueueItem,
-  figure: Figure | null | undefined,
+  figure: Figure | null | undefined
 ): FigureProgress {
   if (!figure) return { completed: 0, total: 0 }
   const total = figure.requiredColors.length
   const completed = figure.requiredColors.filter((c) =>
-    queueItem.completedColors.includes(c),
+    queueItem.completedColors.includes(c)
   ).length
   return { completed, total }
 }
 
 export function computeCompletionStatus(
   queueItem: QueueItem,
-  figure: Figure | null | undefined,
+  figure: Figure | null | undefined
 ): boolean {
   const { completed, total } = computeFigureProgress(queueItem, figure)
   return total > 0 && completed === total
+}
+
+export function isCompletedToday(
+  queueItem: QueueItem,
+  now: Date = new Date()
+): boolean {
+  if (!queueItem.completedAt) return false
+
+  const completedAt = new Date(queueItem.completedAt)
+  return (
+    completedAt.getFullYear() === now.getFullYear() &&
+    completedAt.getMonth() === now.getMonth() &&
+    completedAt.getDate() === now.getDate()
+  )
 }

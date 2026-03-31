@@ -18,4 +18,5 @@ export interface QueueItem {
   figureId: string
   type: "stock" | "order"
   completedColors: string[]
+  completedAt: string | null
 }
