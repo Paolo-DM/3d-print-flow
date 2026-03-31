@@ -1,3 +1,4 @@
+import { useRef, useState } from "react"
 import { NavLink, useLocation } from "react-router"
 import {
   BookOpen,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { exportData } from "~/lib/export-import"
+import { ImportDialog } from "~/components/ImportDialog"
 import {
   Sidebar,
   SidebarContent,
@@ -44,6 +46,31 @@ const archiveItems: NavItem[] = [
 
 export function AppSidebar() {
   const { pathname } = useLocation()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+
+  function handleImportClick() {
+    fileInputRef.current?.click()
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+      setImportDialogOpen(true)
+    }
+  }
+
+  function handleImportDialogChange(open: boolean) {
+    setImportDialogOpen(open)
+    if (!open) {
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -120,12 +147,25 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton disabled tooltip="Import">
+            <SidebarMenuButton tooltip="Import" onClick={handleImportClick}>
               <Upload />
               <span>Import</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          className="hidden"
+          onChange={handleFileChange}
+          data-testid="import-file-input"
+        />
+        <ImportDialog
+          open={importDialogOpen}
+          onOpenChange={handleImportDialogChange}
+          file={selectedFile}
+        />
       </SidebarFooter>
     </Sidebar>
   )

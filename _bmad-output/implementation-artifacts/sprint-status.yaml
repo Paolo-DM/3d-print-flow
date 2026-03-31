@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-27
-last_updated: 2026-03-31T13:02:08Z
+last_updated: 2026-03-31T00:00:00Z
 project: 3d-print-flow
 project_key: NOKEY
 tracking_system: file-system
@@ -74,6 +74,6 @@ development_status:
   # Epic 4: Data Portability & Error Resilience
   epic-4: in-progress
   4-1-json-export: done
-  4-2-json-import-with-atomic-replace: backlog
+  4-2-json-import-with-atomic-replace: review
   4-3-persistence-failure-notification-with-retry: backlog
   epic-4-retrospective: optional

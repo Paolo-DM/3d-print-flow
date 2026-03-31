@@ -8,6 +8,7 @@ import { AppSidebar } from "~/components/AppSidebar"
 
 vi.mock("~/lib/export-import", () => ({
   exportData: vi.fn(),
+  importData: vi.fn(),
 }))
 import { SidebarProvider } from "~/components/ui/sidebar"
 import { TooltipProvider } from "~/components/ui/tooltip"
@@ -70,13 +71,13 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Completed")).toBeTruthy()
   })
 
-  it("renders enabled Export button and disabled Import button in footer", () => {
+  it("renders enabled Export and Import buttons in footer", () => {
     renderSidebar()
 
     const exportButton = screen.getByText("Export").closest("button")
     const importButton = screen.getByText("Import").closest("button")
     expect(exportButton?.disabled).toBe(false)
-    expect(importButton?.disabled).toBe(true)
+    expect(importButton?.disabled).toBe(false)
   })
 
   it("clicking Export triggers the download flow", () => {
@@ -112,5 +113,41 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Figure Catalog").closest("a")?.getAttribute("href")).toBe("/catalog")
     expect(screen.getByText("Filament Spools").closest("a")?.getAttribute("href")).toBe("/spools")
     expect(screen.getByText("Completed").closest("a")?.getAttribute("href")).toBe("/completed")
+  })
+
+  it("Import button click triggers hidden file input", () => {
+    renderSidebar()
+
+    const fileInput = screen.getByTestId(
+      "import-file-input"
+    ) as HTMLInputElement
+    const clickSpy = vi.spyOn(fileInput, "click")
+
+    const importButton = screen.getByText("Import").closest("button")!
+    fireEvent.click(importButton)
+
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+  })
+
+  it("file selection opens ImportDialog", () => {
+    renderSidebar()
+
+    const fileInput = screen.getByTestId(
+      "import-file-input"
+    ) as HTMLInputElement
+
+    const testFile = new File(['{"test": true}'], "test.json", {
+      type: "application/json",
+    })
+
+    Object.defineProperty(fileInput, "files", {
+      value: [testFile],
+      writable: false,
+    })
+
+    fireEvent.change(fileInput)
+
+    expect(screen.getByText("Replace All Data?")).toBeTruthy()
   })
 })
