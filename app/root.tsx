@@ -1,4 +1,3 @@
-import { useEffect } from "react"
 import {
   Links,
   Meta,
@@ -22,6 +21,7 @@ import {
 import { TooltipProvider } from "~/components/ui/tooltip"
 import { initApp } from "~/lib/init"
 import { type Theme, themeCookie } from "~/lib/theme.server"
+import { Layers } from "lucide-react"
 import "./app.css"
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -34,6 +34,22 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return data({ theme }, { headers })
+}
+
+export async function clientLoader({
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const [serverData] = await Promise.all([serverLoader(), initApp()])
+  return serverData
+}
+clientLoader.hydrate = true as const
+
+export function HydrateFallback() {
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <Layers className="size-6 animate-pulse text-primary" />
+    </div>
+  )
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -67,10 +83,6 @@ const pageTitles: Record<string, string> = {
 
 export default function App() {
   const { pathname } = useLocation()
-
-  useEffect(() => {
-    initApp()
-  }, [])
 
   const pageTitle = pageTitles[pathname] ?? ""
 
