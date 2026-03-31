@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, beforeAll, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { createRoutesStub } from "react-router"
 
+import { exportData } from "~/lib/export-import"
 import { AppSidebar } from "~/components/AppSidebar"
+
+vi.mock("~/lib/export-import", () => ({
+  exportData: vi.fn(),
+}))
 import { SidebarProvider } from "~/components/ui/sidebar"
 import { TooltipProvider } from "~/components/ui/tooltip"
 
@@ -65,13 +70,22 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Completed")).toBeTruthy()
   })
 
-  it("renders disabled Export and Import buttons in footer", () => {
+  it("renders enabled Export button and disabled Import button in footer", () => {
     renderSidebar()
 
     const exportButton = screen.getByText("Export").closest("button")
     const importButton = screen.getByText("Import").closest("button")
-    expect(exportButton?.disabled).toBe(true)
+    expect(exportButton?.disabled).toBe(false)
     expect(importButton?.disabled).toBe(true)
+  })
+
+  it("clicking Export triggers the download flow", () => {
+    renderSidebar()
+
+    const exportButton = screen.getByText("Export").closest("button")!
+    fireEvent.click(exportButton)
+
+    expect(exportData).toHaveBeenCalled()
   })
 
   it("highlights active navigation item based on current route", () => {

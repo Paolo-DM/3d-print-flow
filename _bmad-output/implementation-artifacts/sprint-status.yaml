@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-27
-last_updated: 2026-03-31T14:18:00
+last_updated: 2026-03-31T13:02:08Z
 project: 3d-print-flow
 project_key: NOKEY
 tracking_system: file-system
@@ -61,19 +61,19 @@ development_status:
   epic-2-retrospective: optional
 
   # Epic 3: Print Queue & Color-First Production
-  epic-3: in-progress
+  epic-3: done
   3-1-add-to-queue-queue-store-mutations: done
   3-2-color-view-ranked-color-list-expandable-figure-lists: done
   3-3-colorchip-toggle-the-signature-interaction: done
   3-4-figure-view-queue-as-figure-cards: done
   3-5-figure-completion-cascade-completed-section: done
   3-6-order-priority-in-color-ranking: done
-  3-7-edit-form-affected-queue-items-warning: backlog
+  3-7-edit-form-affected-queue-items-warning: done
   epic-3-retrospective: optional
 
   # Epic 4: Data Portability & Error Resilience
-  epic-4: backlog
-  4-1-json-export: backlog
+  epic-4: in-progress
+  4-1-json-export: done
   4-2-json-import-with-atomic-replace: backlog
   4-3-persistence-failure-notification-with-retry: backlog
   epic-4-retrospective: optional

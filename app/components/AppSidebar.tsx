@@ -9,6 +9,7 @@ import {
   Upload,
 } from "lucide-react"
 
+import { exportData } from "~/lib/export-import"
 import {
   Sidebar,
   SidebarContent,
@@ -113,7 +114,7 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton disabled tooltip="Export">
+            <SidebarMenuButton tooltip="Export" onClick={exportData}>
               <Download />
               <span>Export</span>
             </SidebarMenuButton>

@@ -11,7 +11,11 @@ import {
 import type { Route } from "./+types/root"
 import { AppSidebar } from "~/components/AppSidebar"
 import { Toaster } from "~/components/ui/sonner"
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar"
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "~/components/ui/sidebar"
 import { TooltipProvider } from "~/components/ui/tooltip"
 import { initApp } from "~/lib/init"
 import "./app.css"
@@ -19,7 +23,7 @@ import "./app.css"
 const darkModeScript = `
 (function() {
   var theme = localStorage.getItem("theme");
-  var isDark = theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  var isDark = theme === "" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
   if (isDark) document.documentElement.classList.add("dark");
 })();
 `
