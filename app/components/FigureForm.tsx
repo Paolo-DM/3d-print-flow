@@ -70,8 +70,8 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-6 p-4">
-      <FieldGroup>
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-6 p-4">
+      <FieldGroup className="min-h-0 flex-1">
         <Field>
           <FieldLabel htmlFor="figure-name">Name</FieldLabel>
           <Input
@@ -115,13 +115,14 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
             data-testid="figure-notes-input"
           />
         </Field>
-        <Field>
+        <Field className="min-h-0 flex-1">
           <FieldLabel>Colors</FieldLabel>
           {spoolList.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No spools available. Create spools first.
             </p>
           ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-md">
             <div className="flex flex-wrap gap-2" data-testid="color-selection">
               {spoolList.map((spool) => {
                 const isSelected = selectedColors.includes(spool.id)
@@ -131,6 +132,7 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
                     key={spool.id}
                     type="button"
                     aria-pressed={isSelected}
+                    aria-label={`Toggle ${spool.name}`}
                     onClick={() => handleToggleSpool(spool.id)}
                     className={cn(
                       "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
@@ -147,11 +149,13 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
                         lightness < 0.15 && "dark:border dark:border-border"
                       )}
                       style={{ backgroundColor: spool.hex }}
+                      aria-hidden="true"
                     />
                     <span>{spool.name}</span>
                   </button>
                 )
               })}
+            </div>
             </div>
           )}
         </Field>

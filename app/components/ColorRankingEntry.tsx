@@ -115,6 +115,7 @@ export function ColorRankingEntry({
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-all duration-200 hover:bg-muted/60"
+          aria-label={`${entry.spool.name}: ${entry.count} figure${entry.count === 1 ? "" : "s"} remaining, ${open ? "collapse" : "expand"}`}
           data-testid="color-ranking-entry"
         >
           <span className="w-6 text-center text-base font-bold text-muted-foreground tabular-nums">
@@ -122,16 +123,12 @@ export function ColorRankingEntry({
           </span>
           <span
             className={cn(
-              "size-8 shrink-0 rounded-md dark:[box-shadow:var(--swatch-glow)]",
+              "size-10 shrink-0 rounded-md",
               lightness > 0.85 && "border border-border",
               lightness < 0.15 && "dark:border dark:border-border"
             )}
-            style={
-              {
-                backgroundColor: entry.spool.hex,
-                "--swatch-glow": `0 0 8px ${entry.spool.hex}40`,
-              } as React.CSSProperties
-            }
+            style={{ backgroundColor: entry.spool.hex }}
+            aria-hidden="true"
             data-testid="color-swatch"
           />
           <span className="min-w-0 flex-1">
@@ -141,7 +138,7 @@ export function ColorRankingEntry({
             figures
           </span>
           {entry.hasOrders ? (
-            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+            <Badge className="bg-order-muted text-order">
               Order
             </Badge>
           ) : null}
@@ -206,7 +203,7 @@ export function ColorRankingEntry({
                     {qi.type === "order" ? (
                       <Badge
                         variant="outline"
-                        className="text-orange-600 dark:text-orange-400"
+                        className="text-order"
                       >
                         Order
                       </Badge>

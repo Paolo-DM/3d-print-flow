@@ -18,18 +18,16 @@ export default function QueueLayout() {
 
   const ranking = computeColorRanking(spools, figures, queueItems)
 
-  const completedCount = Array.from(queueItems.values()).filter((qi) =>
-    computeCompletionStatus(qi, figures.get(qi.figureId))
-  ).length
-  const completedTodayCount = Array.from(queueItems.values()).filter((qi) =>
-    isCompletedToday(qi)
-  ).length
-
-  const ordersPending = Array.from(queueItems.values()).filter((qi) => {
-    if (qi.type !== "order") return false
+  let completedCount = 0
+  let completedTodayCount = 0
+  let ordersPending = 0
+  for (const qi of queueItems.values()) {
     const figure = figures.get(qi.figureId)
-    return figure ? !computeCompletionStatus(qi, figure) : false
-  }).length
+    const isComplete = figure ? computeCompletionStatus(qi, figure) : false
+    if (isComplete) completedCount++
+    if (isCompletedToday(qi)) completedTodayCount++
+    if (qi.type === "order" && !isComplete) ordersPending++
+  }
 
   const queuedFigures = queueItems.size - completedCount
 
@@ -41,7 +39,7 @@ export default function QueueLayout() {
 
   return (
     <div className="p-4 lg:p-6">
-      <div className="mb-4 grid animate-fade-in-up grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid animate-fade-in-up grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="In Queue" value={queuedFigures} accent="queue" />
         <StatCard label="Colors Left" value={ranking.length} accent="colors" />
         <StatCard label="Orders" value={ordersPending} accent="orders" />

@@ -41,6 +41,7 @@ export function ColorChip({
             lightness > 0.85 && "border border-border",
             lightness < 0.15 && "dark:border dark:border-border"
           )}
+          aria-hidden="true"
         />
         <span className="max-w-30 truncate text-xs">{spool.name}</span>
       </button>
@@ -71,6 +72,7 @@ export function ColorChip({
           lightness < 0.15 && "dark:border dark:border-border"
         )}
         style={{ backgroundColor: spool.hex }}
+        aria-hidden="true"
       />
       <span className="max-w-30 truncate text-xs text-muted-foreground">
         {spool.name}

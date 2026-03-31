@@ -114,7 +114,6 @@ function CompletedArchiveItem({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-7"
                     aria-label={`Remove ${figureName}`}
                   >
                     <Trash2 className="size-3.5" />
@@ -122,10 +121,10 @@ function CompletedArchiveItem({
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Remove from queue?</AlertDialogTitle>
+                    <AlertDialogTitle>Delete completed figure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will remove &ldquo;{figureName}&rdquo; from the print
-                      queue.
+                      This will permanently remove &ldquo;{figureName}&rdquo;
+                      from your completed history.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

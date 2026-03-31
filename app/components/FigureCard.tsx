@@ -56,7 +56,7 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   disabled={figure.requiredColors.length === 0}
                   aria-label={`Add ${figure.name} to queue`}
                 >
@@ -79,7 +79,7 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
             {onEdit ? (
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 onClick={() => onEdit(figure)}
                 aria-label={`Edit ${figure.name}`}
               >
@@ -89,7 +89,7 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
             {onDelete ? (
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 onClick={() => onDelete(figure)}
                 aria-label={`Delete ${figure.name}`}
               >
@@ -115,6 +115,7 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
                       lightness < 0.15 && "dark:border dark:border-border"
                     )}
                     style={{ backgroundColor: spool.hex }}
+                    aria-hidden="true"
                     data-testid="color-swatch"
                   />
                   <span className="text-sm">{spool.name}</span>

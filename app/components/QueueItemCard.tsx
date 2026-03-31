@@ -74,7 +74,7 @@ export function QueueItemCard({
           {queueItem.type === "order" ? (
             <Badge
               variant="outline"
-              className="text-orange-600 dark:text-orange-400"
+              className="text-order"
             >
               Order
             </Badge>
@@ -88,7 +88,6 @@ export function QueueItemCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7"
                 aria-label={`Remove ${figure.name}`}
               >
                 <Trash2 className="size-3.5" />

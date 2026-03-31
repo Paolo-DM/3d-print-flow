@@ -20,16 +20,12 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
       <CardContent className="flex items-center gap-3">
         <div
           className={cn(
-            "size-12 shrink-0 rounded-lg dark:[box-shadow:var(--spool-glow)]",
+            "size-14 shrink-0 rounded-lg",
             lightness > 0.85 && "border border-border",
             lightness < 0.15 && "dark:border dark:border-border"
           )}
-          style={
-            {
-              backgroundColor: spool.hex,
-              "--spool-glow": `0 0 10px ${spool.hex}30`,
-            } as React.CSSProperties
-          }
+          style={{ backgroundColor: spool.hex }}
+          aria-hidden="true"
           data-testid="spool-swatch"
         />
         <span className="flex-1 text-sm font-semibold text-foreground">
@@ -38,7 +34,7 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
         <div className="flex gap-1">
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={() => onEdit(spool)}
             aria-label={`Edit ${spool.name}`}
           >
@@ -46,7 +42,7 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
           </Button>
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={() => onDelete(spool)}
             aria-label={`Delete ${spool.name}`}
           >

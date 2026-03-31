@@ -201,7 +201,7 @@ describe("Completed route", () => {
     fireEvent.click(screen.getByLabelText("Remove Goku"))
 
     await screen.findByRole("alertdialog")
-    expect(screen.getByText("Remove from queue?")).toBeTruthy()
+    expect(screen.getByText("Delete completed figure?")).toBeTruthy()
     expect(screen.getByText("Cancel")).toBeTruthy()
     expect(screen.getAllByText("Remove").length).toBeGreaterThan(0)
   })

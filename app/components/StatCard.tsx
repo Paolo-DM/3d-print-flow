@@ -14,18 +14,20 @@ export function StatCard({ label, value, accent, className }: StatCardProps) {
   return (
     <Card
       className={cn(
-        "border-l-[3px] bg-card/80 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
-        className,
+        "border-l-[3px] bg-card px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+        className
       )}
       style={
         accent
-          ? ({ borderLeftColor: `var(--stat-${accent})` } as React.CSSProperties)
+          ? ({
+              borderLeftColor: `var(--stat-${accent})`,
+            } as React.CSSProperties)
           : undefined
       }
     >
       <CardContent className="p-0">
         <p
-          className="text-3xl font-bold tracking-tight tabular-nums"
+          className="text-3xl font-black tracking-tight tabular-nums"
           style={
             accent
               ? ({ color: `var(--stat-${accent})` } as React.CSSProperties)
@@ -34,7 +36,7 @@ export function StatCard({ label, value, accent, className }: StatCardProps) {
         >
           {value}
         </p>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
           {label}
         </p>
       </CardContent>

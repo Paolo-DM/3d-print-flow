@@ -79,7 +79,13 @@ export default function App() {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b bg-background/80 px-4 shadow-sm backdrop-blur-sm">
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+          >
+            Skip to content
+          </a>
+          <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b bg-background px-4 shadow-sm">
             <SidebarTrigger />
             {pageTitle ? (
               <h1 className="text-sm font-semibold text-foreground">
@@ -87,7 +93,9 @@ export default function App() {
               </h1>
             ) : null}
           </header>
-          <Outlet />
+          <div id="main-content">
+            <Outlet />
+          </div>
         </SidebarInset>
       </SidebarProvider>
       <Toaster />
