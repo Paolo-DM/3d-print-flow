@@ -50,7 +50,7 @@ export function computeColorRanking(
 
   return [...counts.entries()]
     .filter(([, count]) => count > 0)
-    .sort(([, a], [, b]) => b - a)
+    .toSorted(([, a], [, b]) => b - a)
     .flatMap(([spoolId, count]) => {
       const spool = spools.get(spoolId)
       if (!spool) return []
