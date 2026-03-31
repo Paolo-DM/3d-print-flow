@@ -177,4 +177,119 @@ describe("QueueItemCard", () => {
     expect(screen.getAllByRole("switch")).toHaveLength(1)
     expect(screen.getByText("0/2")).toBeTruthy()
   })
+
+  it("applies animate-completion-pulse class when completionPhase is pulsing", () => {
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: ["s-white"],
+    })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        spools={spools}
+        completionPhase="pulsing"
+      />,
+    )
+
+    const card = screen.getByTestId("queue-item-card")
+    expect(card.className).toContain("animate-completion-pulse")
+  })
+
+  it("applies animate-completion-collapse class when completionPhase is collapsing", () => {
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: ["s-white"],
+    })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        spools={spools}
+        completionPhase="collapsing"
+      />,
+    )
+
+    const card = screen.getByTestId("queue-item-card")
+    expect(card.className).toContain("animate-completion-collapse")
+  })
+
+  it("does not apply animation classes when no completionPhase", () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      franchise: "DBZ",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: [],
+    })
+
+    render(
+      <QueueItemCard queueItem={qi} figure={figure} spools={spools} />,
+    )
+
+    const card = screen.getByTestId("queue-item-card")
+    expect(card.className).not.toContain("animate-completion")
+  })
+
+  it("renders remove button with AlertDialog", async () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      franchise: "DBZ",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: [],
+    })
+
+    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+
+    fireEvent.click(screen.getByLabelText("Remove Goku"))
+    await screen.findByRole("alertdialog")
+
+    expect(screen.getByText("Remove from queue?")).toBeTruthy()
+    expect(screen.getByText("Cancel")).toBeTruthy()
+    // Use getAllByText since "Remove" appears in both trigger label and dialog button
+    expect(screen.getAllByText("Remove").length).toBeGreaterThan(0)
+  })
+
+  it("confirm in AlertDialog calls removeFromQueue", async () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      franchise: "DBZ",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: [],
+    })
+    const removeFromQueue = vi.fn()
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+      removeFromQueue,
+    })
+
+    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+
+    fireEvent.click(screen.getByLabelText("Remove Goku"))
+    await screen.findByRole("alertdialog")
+    fireEvent.click(screen.getByText("Remove"))
+    expect(removeFromQueue).toHaveBeenCalledWith("q1")
+  })
 })

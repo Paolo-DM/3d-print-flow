@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
 import {
+  computeCompletionStatus,
   computeFigureProgress,
   type ColorRankingEntry as ColorRankingEntryType,
 } from "~/lib/derived"
@@ -17,6 +18,7 @@ import {
 } from "~/components/ui/collapsible"
 import { Progress } from "~/components/ui/progress"
 import { ColorChip } from "~/components/ColorChip"
+import type { CompletionPhase } from "~/components/QueueItemCard"
 
 interface ColorRankingEntryProps {
   entry: ColorRankingEntryType
@@ -25,6 +27,13 @@ interface ColorRankingEntryProps {
   queueItems: Map<string, QueueItem>
   spools: Map<string, Spool>
   currentSpoolId: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  externalCompletionPhases?: ReadonlyMap<string, CompletionPhase>
+  onExternalCompletionPhaseEnd?: (
+    queueItemId: string,
+    phase: CompletionPhase
+  ) => void
 }
 
 export function ColorRankingEntry({
@@ -34,17 +43,60 @@ export function ColorRankingEntry({
   queueItems,
   spools,
   currentSpoolId,
+  open: controlledOpen,
+  onOpenChange,
+  externalCompletionPhases,
+  onExternalCompletionPhaseEnd,
 }: ColorRankingEntryProps) {
-  const [open, setOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
+  const [, setTick] = useState(0)
+  const prevCompletionRef = useRef(new Map<string, boolean>())
+  const completingRef = useRef(new Map<string, CompletionPhase>())
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
   const lightness = getPerceivedLightness(entry.spool.hex)
+  const open = controlledOpen ?? localOpen
+  const handleOpenChange = onOpenChange ?? setLocalOpen
+  const completionPhases = externalCompletionPhases ?? completingRef.current
+
+  // Track figure completion for cascade animation
+  const completionMap = new Map<string, boolean>()
+  for (const [id, qi] of queueItems) {
+    const figure = figures.get(qi.figureId)
+    if (figure && figure.requiredColors.includes(currentSpoolId)) {
+      completionMap.set(id, computeCompletionStatus(qi, figure))
+    }
+  }
+
+  if (!externalCompletionPhases) {
+    for (const [id, isComplete] of completionMap) {
+      const wasComplete = prevCompletionRef.current.get(id)
+      if (
+        wasComplete === false &&
+        isComplete &&
+        !completingRef.current.has(id)
+      ) {
+        completingRef.current.set(id, "pulsing")
+      }
+    }
+
+    for (const id of completingRef.current.keys()) {
+      if (!queueItems.has(id)) completingRef.current.delete(id)
+    }
+  }
+
+  useEffect(() => {
+    prevCompletionRef.current = completionMap
+  })
 
   const matchingItems = Array.from(queueItems.values())
     .filter((qi) => {
       const figure = figures.get(qi.figureId)
       if (!figure) return false
       if (!figure.requiredColors.includes(currentSpoolId)) return false
-      return !qi.completedColors.includes(currentSpoolId)
+      return (
+        !qi.completedColors.includes(currentSpoolId) ||
+        completionPhases.has(qi.id)
+      )
     })
     .toSorted((a, b) => {
       if (a.type === "order" && b.type !== "order") return -1
@@ -53,7 +105,7 @@ export function ColorRankingEntry({
     })
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
         <button
           type="button"
@@ -64,7 +116,11 @@ export function ColorRankingEntry({
             {rank}
           </span>
           <span
-            className={cn("size-8 shrink-0 rounded-md dark:[box-shadow:var(--swatch-glow)]", lightness > 0.85 && "border border-border", lightness < 0.15 && "dark:border dark:border-border")}
+            className={cn(
+              "size-8 shrink-0 rounded-md dark:[box-shadow:var(--swatch-glow)]",
+              lightness > 0.85 && "border border-border",
+              lightness < 0.15 && "dark:border dark:border-border"
+            )}
             style={
               {
                 backgroundColor: entry.spool.hex,
@@ -90,13 +146,13 @@ export function ColorRankingEntry({
           <ChevronDown
             className={cn(
               "size-4 shrink-0 text-muted-foreground transition-transform",
-              open && "rotate-180",
+              open && "rotate-180"
             )}
           />
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="space-y-3 pb-3 pl-9 pr-3 pt-1">
+        <div className="space-y-3 pt-1 pr-3 pb-3 pl-9">
           {matchingItems.map((qi) => {
             const figure = figures.get(qi.figureId)
             if (!figure) return null
@@ -105,8 +161,31 @@ export function ColorRankingEntry({
               progress.total > 0
                 ? Math.round((progress.completed / progress.total) * 100)
                 : 0
+            const phase = completionPhases.get(qi.id)
             return (
-              <div key={qi.id} className="space-y-2 rounded-md border p-3">
+              <div
+                key={qi.id}
+                className={cn(
+                  "space-y-2 rounded-md border p-3",
+                  phase === "pulsing" && "animate-completion-pulse",
+                  phase === "collapsing" &&
+                    "animate-completion-collapse overflow-hidden"
+                )}
+                onAnimationEnd={
+                  phase
+                    ? externalCompletionPhases
+                      ? () => onExternalCompletionPhaseEnd?.(qi.id, phase)
+                      : () => {
+                          if (phase === "pulsing") {
+                            completingRef.current.set(qi.id, "collapsing")
+                          } else {
+                            completingRef.current.delete(qi.id)
+                          }
+                          setTick((n) => n + 1)
+                        }
+                    : undefined
+                }
+              >
                 <div className="flex items-baseline justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{figure.name}</p>

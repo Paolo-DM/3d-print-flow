@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
@@ -99,7 +105,11 @@ describe("ColorView route", () => {
 
   it("renders ranked list when queue items with incomplete colors exist", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
-    const figure = createFigure({ id: "f1", name: "Naruto", requiredColors: ["s1"] })
+    const figure = createFigure({
+      id: "f1",
+      name: "Naruto",
+      requiredColors: ["s1"],
+    })
     const qi = createQueueItem({ figureId: "f1", completedColors: [] })
     store.setState({
       spools: new Map([["s1", spool]]),
@@ -120,9 +130,18 @@ describe("ColorView route", () => {
     const qi1 = createQueueItem({ figureId: "f1", completedColors: [] })
     const qi2 = createQueueItem({ figureId: "f2", completedColors: [] })
     store.setState({
-      spools: new Map([["s1", spool1], ["s2", spool2]]),
-      figures: new Map([["f1", figure1], ["f2", figure2]]),
-      queueItems: new Map([[qi1.id, qi1], [qi2.id, qi2]]),
+      spools: new Map([
+        ["s1", spool1],
+        ["s2", spool2],
+      ]),
+      figures: new Map([
+        ["f1", figure1],
+        ["f2", figure2],
+      ]),
+      queueItems: new Map([
+        [qi1.id, qi1],
+        [qi2.id, qi2],
+      ]),
     })
 
     renderColorView()
@@ -134,8 +153,16 @@ describe("ColorView route", () => {
   })
 
   it("updates chip state, figure progress, and ranking when a chip is toggled", async () => {
-    const whiteSpool = createSpool({ id: "s-white", name: "White PLA", hex: "#FFFFFF" })
-    const redSpool = createSpool({ id: "s-red", name: "Red PLA", hex: "#FF0000" })
+    const whiteSpool = createSpool({
+      id: "s-white",
+      name: "White PLA",
+      hex: "#FFFFFF",
+    })
+    const redSpool = createSpool({
+      id: "s-red",
+      name: "Red PLA",
+      hex: "#FF0000",
+    })
     const naruto = createFigure({
       id: "f1",
       name: "Naruto",
@@ -174,14 +201,14 @@ describe("ColorView route", () => {
 
     renderColorView()
 
-    const whiteEntry = (await screen.findAllByTestId("color-ranking-entry")).find(
-      (entry) => entry.textContent?.includes("White PLA"),
-    ) as HTMLElement
+    const whiteEntry = (
+      await screen.findAllByTestId("color-ranking-entry")
+    ).find((entry) => entry.textContent?.includes("White PLA")) as HTMLElement
     expect(whiteEntry).toBeTruthy()
     expect(
       screen
         .getAllByTestId("color-ranking-entry")
-        .some((entry) => entry.textContent?.includes("Red PLA")),
+        .some((entry) => entry.textContent?.includes("Red PLA"))
     ).toBe(true)
 
     fireEvent.click(whiteEntry)
@@ -198,7 +225,39 @@ describe("ColorView route", () => {
     expect(
       screen
         .getAllByTestId("color-ranking-entry")
-        .some((entry) => entry.textContent?.includes("Red PLA")),
+        .some((entry) => entry.textContent?.includes("Red PLA"))
     ).toBe(false)
+  })
+
+  it("keeps the disappearing entry open long enough to animate the completed row out", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      franchise: "DBZ",
+      requiredColors: ["s1"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: [],
+    })
+
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+    })
+
+    renderColorView()
+
+    fireEvent.click(await screen.findByTestId("color-ranking-entry"))
+    expect(screen.getByText("Goku")).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText("Mark Red PLA as printed"))
+
+    const animatedCard = screen.getByText("Goku").closest("div.space-y-2")
+    expect(animatedCard).toBeTruthy()
+    expect(animatedCard?.className).toContain("animate-completion-pulse")
   })
 })

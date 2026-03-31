@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-27
-last_updated: 2026-03-31T12:15:00
+last_updated: 2026-03-31T14:18:00
 project: 3d-print-flow
 project_key: NOKEY
 tracking_system: file-system
@@ -66,7 +66,7 @@ development_status:
   3-2-color-view-ranked-color-list-expandable-figure-lists: done
   3-3-colorchip-toggle-the-signature-interaction: done
   3-4-figure-view-queue-as-figure-cards: review
-  3-5-figure-completion-cascade-completed-section: backlog
+  3-5-figure-completion-cascade-completed-section: done
   3-6-order-priority-in-color-ranking: backlog
   3-7-edit-form-affected-queue-items-warning: backlog
   epic-3-retrospective: optional
