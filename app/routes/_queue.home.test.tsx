@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
@@ -131,5 +131,74 @@ describe("ColorView route", () => {
     // Red PLA should be first (count 2 vs count 1)
     expect(entries[0].textContent).toContain("Red PLA")
     expect(entries[1].textContent).toContain("Blue PLA")
+  })
+
+  it("updates chip state, figure progress, and ranking when a chip is toggled", async () => {
+    const whiteSpool = createSpool({ id: "s-white", name: "White PLA", hex: "#FFFFFF" })
+    const redSpool = createSpool({ id: "s-red", name: "Red PLA", hex: "#FF0000" })
+    const naruto = createFigure({
+      id: "f1",
+      name: "Naruto",
+      requiredColors: ["s-white", "s-red"],
+    })
+    const sasuke = createFigure({
+      id: "f2",
+      name: "Sasuke",
+      requiredColors: ["s-white"],
+    })
+    const narutoQueueItem = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      completedColors: [],
+    })
+    const sasukeQueueItem = createQueueItem({
+      id: "q2",
+      figureId: "f2",
+      completedColors: [],
+    })
+
+    store.setState({
+      spools: new Map([
+        [whiteSpool.id, whiteSpool],
+        [redSpool.id, redSpool],
+      ]),
+      figures: new Map([
+        [naruto.id, naruto],
+        [sasuke.id, sasuke],
+      ]),
+      queueItems: new Map([
+        [narutoQueueItem.id, narutoQueueItem],
+        [sasukeQueueItem.id, sasukeQueueItem],
+      ]),
+    })
+
+    renderColorView()
+
+    const whiteEntry = (await screen.findAllByTestId("color-ranking-entry")).find(
+      (entry) => entry.textContent?.includes("White PLA"),
+    ) as HTMLElement
+    expect(whiteEntry).toBeTruthy()
+    expect(
+      screen
+        .getAllByTestId("color-ranking-entry")
+        .some((entry) => entry.textContent?.includes("Red PLA")),
+    ).toBe(true)
+
+    fireEvent.click(whiteEntry)
+
+    const redChip = screen.getByLabelText("Mark Red PLA as printed")
+    const narutoCard = redChip.closest("div.space-y-2") as HTMLElement
+    expect(narutoCard).toBeTruthy()
+    expect(within(narutoCard).getByText("0/2")).toBeTruthy()
+
+    fireEvent.click(redChip)
+
+    expect(within(narutoCard).getByLabelText("Unmark Red PLA")).toBeTruthy()
+    expect(within(narutoCard).getByText("1/2")).toBeTruthy()
+    expect(
+      screen
+        .getAllByTestId("color-ranking-entry")
+        .some((entry) => entry.textContent?.includes("Red PLA")),
+    ).toBe(false)
   })
 })

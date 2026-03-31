@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createSpool } from "~/lib/test-utils"
 import { ColorChip } from "~/components/ColorChip"
@@ -59,5 +59,54 @@ describe("ColorChip", () => {
 
     const dot = container.querySelector(".rounded-full.opacity-40") as HTMLElement
     expect(dot.className).toContain("border")
+  })
+
+  it("renders role=switch with aria-checked=false when pending", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<ColorChip spool={spool} isCompleted={false} />)
+
+    const chip = screen.getByRole("switch")
+    expect(chip.getAttribute("aria-checked")).toBe("false")
+  })
+
+  it("renders role=switch with aria-checked=true when completed", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<ColorChip spool={spool} isCompleted={true} />)
+
+    const chip = screen.getByRole("switch")
+    expect(chip.getAttribute("aria-checked")).toBe("true")
+  })
+
+  it("calls onClick handler when clicked", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    const handleClick = vi.fn()
+    render(<ColorChip spool={spool} isCompleted={false} onClick={handleClick} />)
+
+    fireEvent.click(screen.getByRole("switch"))
+    expect(handleClick).toHaveBeenCalledOnce()
+  })
+
+  it("renders as button element", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<ColorChip spool={spool} isCompleted={false} />)
+
+    const chip = screen.getByRole("switch")
+    expect(chip.tagName).toBe("BUTTON")
+  })
+
+  it("renders a disabled switch when no onClick is provided", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<ColorChip spool={spool} isCompleted={false} />)
+
+    const chip = screen.getByRole("switch") as HTMLButtonElement
+    expect(chip.disabled).toBe(true)
+  })
+
+  it("renders an enabled switch when onClick is provided", () => {
+    const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
+    render(<ColorChip spool={spool} isCompleted={false} onClick={() => {}} />)
+
+    const chip = screen.getByRole("switch") as HTMLButtonElement
+    expect(chip.disabled).toBe(false)
   })
 })

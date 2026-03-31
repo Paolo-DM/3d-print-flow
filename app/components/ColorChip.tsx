@@ -16,11 +16,20 @@ export function ColorChip({
   onClick,
 }: ColorChipProps) {
   const lightness = getPerceivedLightness(spool.hex)
+  const isInteractive = onClick !== undefined
 
   if (isCompleted) {
     return (
-      <span
-        className="inline-flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5"
+      <button
+        type="button"
+        role="switch"
+        aria-checked={true}
+        aria-label={`Unmark ${spool.name}`}
+        className={cn(
+          "inline-flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 transition-all duration-150 ease-out",
+          isInteractive ? "cursor-pointer active:scale-95" : "cursor-default",
+        )}
+        disabled={!isInteractive}
         style={{ backgroundColor: spool.hex, color: hexToContrast(spool.hex) }}
         onClick={onClick}
       >
@@ -32,16 +41,22 @@ export function ColorChip({
           )}
         />
         <span className="text-sm">{spool.name}</span>
-      </span>
+      </button>
     )
   }
 
   return (
-    <span
+    <button
+      type="button"
+      role="switch"
+      aria-checked={false}
+      aria-label={`Mark ${spool.name} as printed`}
       className={cn(
-        "inline-flex min-h-[44px] items-center gap-2 rounded-full bg-muted px-3 py-1.5",
+        "inline-flex min-h-[44px] items-center gap-2 rounded-full bg-muted px-3 py-1.5 transition-all duration-150 ease-out",
+        isInteractive ? "cursor-pointer active:scale-95" : "cursor-default",
         isCurrent && "ring-2 ring-primary animate-pulse",
       )}
+      disabled={!isInteractive}
       onClick={onClick}
     >
       <span
@@ -53,6 +68,6 @@ export function ColorChip({
         style={{ backgroundColor: spool.hex }}
       />
       <span className="text-sm text-muted-foreground">{spool.name}</span>
-    </span>
+    </button>
   )
 }

@@ -1,9 +1,19 @@
 // @vitest-environment jsdom
+import "fake-indexeddb/auto"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import { store } from "~/lib/store"
 import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
 import { ColorRankingEntry } from "~/components/ColorRankingEntry"
+
+beforeEach(() => {
+  store.setState({
+    spools: new Map(),
+    figures: new Map(),
+    queueItems: new Map(),
+  })
+})
 
 afterEach(cleanup)
 
@@ -155,5 +165,67 @@ describe("ColorRankingEntry", () => {
 
     const rankEl = screen.getByText("3")
     expect(rankEl.className).toContain("tabular-nums")
+  })
+
+  it("toggles chip state when ColorChip is clicked", () => {
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white", "s-red"] })
+    const qi = createQueueItem({ id: "q1", figureId: "f1", completedColors: [] })
+    const entry = makeEntry({ count: 1 })
+
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+    })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        queueItems={new Map([["q1", qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    const pendingChip = screen.getByLabelText("Mark White PLA as printed")
+    fireEvent.click(pendingChip)
+
+    expect(
+      store.getState().queueItems.get("q1")?.completedColors,
+    ).toContain("s-white")
+  })
+
+  it("un-toggles chip when completed ColorChip is clicked", () => {
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white", "s-red"] })
+    const qi = createQueueItem({ id: "q1", figureId: "f1", completedColors: ["s-red"] })
+    const entry = makeEntry({ count: 1 })
+
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+    })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        queueItems={new Map([["q1", qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    const completedChip = screen.getByLabelText("Unmark Red PLA")
+    fireEvent.click(completedChip)
+
+    expect(
+      store.getState().queueItems.get("q1")?.completedColors,
+    ).not.toContain("s-red")
   })
 })

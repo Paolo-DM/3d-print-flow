@@ -6,6 +6,7 @@ import {
   computeFigureProgress,
   type ColorRankingEntry as ColorRankingEntryType,
 } from "~/lib/derived"
+import { usePrintFlowStore } from "~/lib/store"
 import type { Figure, QueueItem, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Badge } from "~/components/ui/badge"
@@ -35,6 +36,7 @@ export function ColorRankingEntry({
   currentSpoolId,
 }: ColorRankingEntryProps) {
   const [open, setOpen] = useState(false)
+  const toggleChip = usePrintFlowStore((s) => s.toggleChip)
   const lightness = getPerceivedLightness(entry.spool.hex)
 
   const matchingItems = Array.from(queueItems.values())
@@ -133,6 +135,7 @@ export function ColorRankingEntry({
                         spool={spool}
                         isCompleted={qi.completedColors.includes(spoolId)}
                         isCurrent={spoolId === currentSpoolId}
+                        onClick={() => toggleChip(qi.id, spoolId)}
                       />
                     )
                   })}
