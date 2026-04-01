@@ -70,7 +70,10 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-6 p-4">
+    <form
+      onSubmit={handleSubmit}
+      className="flex min-h-0 flex-1 flex-col gap-6 p-4"
+    >
       <FieldGroup className="min-h-0 flex-1">
         <Field>
           <FieldLabel htmlFor="figure-name">Name</FieldLabel>
@@ -123,39 +126,42 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
             </p>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md">
-            <div className="flex flex-wrap gap-2" data-testid="color-selection">
-              {spoolList.map((spool) => {
-                const isSelected = selectedColors.includes(spool.id)
-                const lightness = getPerceivedLightness(spool.hex)
-                return (
-                  <button
-                    key={spool.id}
-                    type="button"
-                    aria-pressed={isSelected}
-                    aria-label={`Toggle ${spool.name}`}
-                    onClick={() => handleToggleSpool(spool.id)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
-                      isSelected
-                        ? "bg-accent ring-2 ring-ring"
-                        : "border-border bg-card"
-                    )}
-                    data-testid={`spool-toggle-${spool.id}`}
-                  >
-                    <div
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid="color-selection"
+              >
+                {spoolList.map((spool) => {
+                  const isSelected = selectedColors.includes(spool.id)
+                  const lightness = getPerceivedLightness(spool.hex)
+                  return (
+                    <button
+                      key={spool.id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`Toggle ${spool.name}`}
+                      onClick={() => handleToggleSpool(spool.id)}
                       className={cn(
-                        "size-4 shrink-0 rounded-full",
-                        lightness > 0.85 && "border border-border",
-                        lightness < 0.15 && "dark:border dark:border-border"
+                        "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
+                        isSelected
+                          ? "border-transparent bg-accent"
+                          : "border-border bg-card"
                       )}
-                      style={{ backgroundColor: spool.hex }}
-                      aria-hidden="true"
-                    />
-                    <span>{spool.name}</span>
-                  </button>
-                )
-              })}
-            </div>
+                      data-testid={`spool-toggle-${spool.id}`}
+                    >
+                      <div
+                        className={cn(
+                          "size-4 shrink-0 rounded-full",
+                          lightness > 0.85 && "border border-border",
+                          lightness < 0.15 && "dark:border dark:border-border"
+                        )}
+                        style={{ backgroundColor: spool.hex }}
+                        aria-hidden="true"
+                      />
+                      <span>{spool.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
         </Field>
