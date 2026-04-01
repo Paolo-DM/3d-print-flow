@@ -41,31 +41,43 @@ export function SpoolForm({ spool, onSave, onCancel }: SpoolFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-6 p-4">
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="spool-name">Name</FieldLabel>
-          <Input
-            id="spool-name"
-            autoFocus={!spool}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. White PLA"
-            data-testid="spool-name-input"
-          />
-        </Field>
-        <Field>
-          <FieldLabel>Color</FieldLabel>
-          <HexColorPicker value={hex} onChange={setHex} />
-        </Field>
-      </FieldGroup>
-      <div className="mt-auto flex gap-3">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!canSave}>
-          Save
-        </Button>
+    <form
+      onSubmit={handleSubmit}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        <FieldGroup className="gap-6">
+          <Field>
+            <FieldLabel htmlFor="spool-name">Name</FieldLabel>
+            <Input
+              id="spool-name"
+              autoFocus={!spool}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. White PLA"
+              data-testid="spool-name-input"
+            />
+          </Field>
+          <Field>
+            <FieldLabel>Color</FieldLabel>
+            <HexColorPicker value={hex} onChange={setHex} />
+          </Field>
+        </FieldGroup>
+      </div>
+      <div className="shrink-0 border-t border-border/70 bg-popover/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] supports-backdrop-filter:bg-popover/90 supports-backdrop-filter:backdrop-blur-xs">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSave} className="flex-1">
+            Save
+          </Button>
+        </div>
       </div>
     </form>
   )

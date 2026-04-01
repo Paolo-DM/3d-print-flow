@@ -72,60 +72,60 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex min-h-0 flex-1 flex-col gap-6 p-4"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      <FieldGroup className="min-h-0 flex-1">
-        <Field>
-          <FieldLabel htmlFor="figure-name">Name</FieldLabel>
-          <Input
-            id="figure-name"
-            autoFocus={!figure}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Naruto Uzumaki"
-            data-testid="figure-name-input"
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="figure-franchise">Franchise</FieldLabel>
-          <Input
-            id="figure-franchise"
-            value={franchise}
-            onChange={(e) => setFranchise(e.target.value)}
-            placeholder="e.g. Naruto Shippuden"
-            data-testid="figure-franchise-input"
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="figure-size">Size (%)</FieldLabel>
-          <Input
-            id="figure-size"
-            type="number"
-            min={1}
-            max={999}
-            value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
-            data-testid="figure-size-input"
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="figure-notes">Notes</FieldLabel>
-          <Textarea
-            id="figure-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes..."
-            data-testid="figure-notes-input"
-          />
-        </Field>
-        <Field className="min-h-0 flex-1">
-          <FieldLabel>Colors</FieldLabel>
-          {spoolList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No spools available. Create spools first.
-            </p>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-md">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        <FieldGroup className="gap-6">
+          <Field>
+            <FieldLabel htmlFor="figure-name">Name</FieldLabel>
+            <Input
+              id="figure-name"
+              autoFocus={!figure}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Naruto Uzumaki"
+              data-testid="figure-name-input"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="figure-franchise">Franchise</FieldLabel>
+            <Input
+              id="figure-franchise"
+              value={franchise}
+              onChange={(e) => setFranchise(e.target.value)}
+              placeholder="e.g. Naruto Shippuden"
+              data-testid="figure-franchise-input"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="figure-size">Size (%)</FieldLabel>
+            <Input
+              id="figure-size"
+              type="number"
+              min={1}
+              max={999}
+              value={size}
+              onChange={(e) => setSize(Number(e.target.value))}
+              data-testid="figure-size-input"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="figure-notes">Notes</FieldLabel>
+            <Textarea
+              id="figure-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes..."
+              data-testid="figure-notes-input"
+            />
+          </Field>
+          <Field>
+            <FieldLabel>Colors</FieldLabel>
+            {spoolList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No spools available. Create spools first.
+              </p>
+            ) : (
               <div
                 className="flex flex-wrap gap-2"
                 data-testid="color-selection"
@@ -162,21 +162,26 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
                   )
                 })}
               </div>
-            </div>
-          )}
-        </Field>
-      </FieldGroup>
-      <div className="mt-auto space-y-3">
+            )}
+          </Field>
+        </FieldGroup>
+      </div>
+      <div className="shrink-0 space-y-3 border-t border-border/70 bg-popover/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] supports-backdrop-filter:bg-popover/90 supports-backdrop-filter:backdrop-blur-xs">
         {figure && affectedQueueItems.length > 0 ? (
           <p className="text-sm text-muted-foreground">
             Saving will update {affectedQueueItems.length} queued item(s).
           </p>
         ) : null}
         <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1"
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={!canSave}>
+          <Button type="submit" disabled={!canSave} className="flex-1">
             Save
           </Button>
         </div>
