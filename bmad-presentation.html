@@ -1,0 +1,2404 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Print Flow — BMAD Method Case Study</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ========================================
+     CSS Custom Properties — from app/app.css
+     ======================================== */
+      :root {
+        --background: oklch(0.985 0.004 65);
+        --foreground: oklch(0.148 0.006 50);
+        --card: oklch(0.995 0.002 65);
+        --card-foreground: oklch(0.148 0.006 50);
+        --popover: oklch(0.995 0.002 65);
+        --popover-foreground: oklch(0.148 0.006 50);
+        --primary: oklch(0.52 0.105 223.128);
+        --primary-foreground: oklch(0.984 0.019 200.873);
+        --secondary: oklch(0.96 0.003 60);
+        --secondary-foreground: oklch(0.21 0.006 50);
+        --muted: oklch(0.96 0.005 60);
+        --muted-foreground: oklch(0.5 0.012 55);
+        --accent: oklch(0.52 0.105 223.128);
+        --accent-foreground: oklch(0.984 0.019 200.873);
+        --destructive: oklch(0.577 0.245 27.325);
+        --border: oklch(0.92 0.006 60);
+        --input: oklch(0.92 0.006 60);
+        --ring: oklch(0.72 0.012 55);
+        --radius: 0.625rem;
+
+        --stat-queue: oklch(0.55 0.19 230);
+        --stat-colors: oklch(0.55 0.2 290);
+        --stat-orders: oklch(0.62 0.22 50);
+        --stat-completed: oklch(0.55 0.19 155);
+      }
+
+      .dark {
+        --background: oklch(0.14 0.008 50);
+        --foreground: oklch(0.987 0.004 60);
+        --card: oklch(0.2 0.01 50);
+        --card-foreground: oklch(0.987 0.004 60);
+        --popover: oklch(0.2 0.01 50);
+        --popover-foreground: oklch(0.987 0.004 60);
+        --primary: oklch(0.45 0.085 224.283);
+        --primary-foreground: oklch(0.984 0.019 200.873);
+        --secondary: oklch(0.274 0.005 50);
+        --secondary-foreground: oklch(0.985 0 0);
+        --muted: oklch(0.275 0.01 50);
+        --muted-foreground: oklch(0.72 0.01 55);
+        --accent: oklch(0.45 0.085 224.283);
+        --accent-foreground: oklch(0.984 0.019 200.873);
+        --destructive: oklch(0.704 0.191 22.216);
+        --border: oklch(1 0 0 / 12%);
+        --input: oklch(1 0 0 / 15%);
+        --ring: oklch(0.56 0.015 55);
+
+        --stat-queue: oklch(0.65 0.18 230);
+        --stat-colors: oklch(0.65 0.19 290);
+        --stat-orders: oklch(0.72 0.2 50);
+        --stat-completed: oklch(0.65 0.18 155);
+      }
+
+      /* ========================================
+     Reset & Base
+     ======================================== */
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family:
+          "Inter",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: var(--background);
+        color: var(--foreground);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ========================================
+     Navigation
+     ======================================== */
+      .nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        background: oklch(0.985 0.004 65 / 80%);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: background 0.3s;
+      }
+
+      .dark .nav {
+        background: oklch(0.14 0.008 50 / 80%);
+      }
+
+      .nav-logo {
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+        color: var(--foreground);
+      }
+
+      .nav-pills {
+        display: flex;
+        gap: 2px;
+        margin-left: auto;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .nav-pills::-webkit-scrollbar {
+        display: none;
+      }
+
+      .nav-pill {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: var(--muted-foreground);
+        transition: all 0.2s;
+        white-space: nowrap;
+        font-family: inherit;
+      }
+      .nav-pill:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .nav-pill.active {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .theme-toggle {
+        margin-left: 8px;
+        padding: 6px 10px;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--foreground);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        transition: all 0.2s;
+        font-family: inherit;
+      }
+      .theme-toggle:hover {
+        background: var(--muted);
+      }
+
+      /* ========================================
+     Sections
+     ======================================== */
+      .section {
+        min-height: 100vh;
+        min-height: 100dvh;
+        scroll-snap-align: start;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 100px 48px 60px;
+        max-width: 1100px;
+        margin: 0 auto;
+        width: 100%;
+      }
+
+      .section.tall {
+        min-height: auto;
+        scroll-snap-align: start;
+        padding-bottom: 80px;
+      }
+
+      .section-label {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--primary);
+        background: oklch(0.52 0.105 223.128 / 10%);
+        padding: 4px 12px;
+        border-radius: 20px;
+        margin-bottom: 16px;
+        width: fit-content;
+      }
+      .dark .section-label {
+        background: oklch(0.45 0.085 224.283 / 15%);
+      }
+
+      .section-title {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        line-height: 1.2;
+      }
+
+      .section-subtitle {
+        font-size: 16px;
+        color: var(--muted-foreground);
+        margin-bottom: 36px;
+        max-width: 640px;
+        line-height: 1.6;
+      }
+
+      /* ========================================
+     Hero Section
+     ======================================== */
+      .hero {
+        text-align: center;
+        align-items: center;
+      }
+
+      .hero .section-label {
+        margin-bottom: 20px;
+      }
+
+      .hero-title {
+        font-size: 56px;
+        font-weight: 800;
+        line-height: 1.1;
+        margin-bottom: 16px;
+        letter-spacing: -0.02em;
+      }
+
+      .hero-subtitle {
+        font-size: 19px;
+        color: var(--muted-foreground);
+        max-width: 600px;
+        margin: 0 auto 12px;
+        line-height: 1.5;
+      }
+
+      .hero-sub2 {
+        font-size: 14px;
+        color: var(--muted-foreground);
+        opacity: 0.7;
+        margin-bottom: 40px;
+      }
+
+      .hero-stats {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .hero-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .hero-stat strong {
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .scroll-hint {
+        margin-top: 48px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        opacity: 0.5;
+        animation: bounce 2s infinite;
+      }
+
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(6px);
+        }
+      }
+
+      /* ========================================
+     Cards
+     ======================================== */
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        transition:
+          box-shadow 0.2s,
+          transform 0.2s;
+      }
+      .card:hover {
+        box-shadow: 0 4px 16px oklch(0 0 0 / 6%);
+      }
+      .dark .card:hover {
+        box-shadow: 0 4px 16px oklch(0 0 0 / 20%);
+      }
+
+      .card-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+
+      .card-desc {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.5;
+      }
+
+      .card-icon {
+        font-size: 24px;
+        margin-bottom: 10px;
+        display: block;
+      }
+
+      /* ========================================
+     Grids
+     ======================================== */
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+
+      /* ========================================
+     Callout
+     ======================================== */
+      .callout {
+        background: var(--card);
+        border: 1px solid var(--primary);
+        border-left: 3px solid var(--primary);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin-bottom: 28px;
+        font-size: 16px;
+        line-height: 1.6;
+        font-style: italic;
+        color: var(--card-foreground);
+      }
+
+      .callout-neutral {
+        border-color: var(--border);
+        border-left-color: var(--muted-foreground);
+        font-style: normal;
+        font-size: 14px;
+      }
+
+      /* ========================================
+     Tech Pills
+     ======================================== */
+      .tech-pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 24px;
+      }
+      .tech-pill {
+        padding: 4px 12px;
+        background: var(--muted);
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+
+      /* ========================================
+     Slash Command Styling
+     ======================================== */
+      .slash-cmd {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 0.85em;
+        background: var(--muted);
+        color: var(--primary);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      /* ========================================
+     Phase Flow Diagram
+     ======================================== */
+      .phase-flow {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        margin-bottom: 36px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .phase-node {
+        padding: 12px 20px;
+        border-radius: var(--radius);
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        text-align: center;
+        min-width: 140px;
+      }
+      .phase-node.analysis {
+        background: var(--stat-queue);
+      }
+      .phase-node.planning {
+        background: var(--stat-colors);
+      }
+      .phase-node.solutioning {
+        background: var(--stat-orders);
+      }
+      .phase-node.implementation {
+        background: var(--stat-completed);
+      }
+
+      .phase-arrow {
+        font-size: 20px;
+        color: var(--muted-foreground);
+        padding: 0 8px;
+        opacity: 0.5;
+      }
+
+      /* ========================================
+     Agent Persona Cards
+     ======================================== */
+      .agent-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--stat-queue);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+      }
+      .agent-card.c2 {
+        border-left-color: var(--stat-colors);
+      }
+      .agent-card.c3 {
+        border-left-color: var(--stat-orders);
+      }
+      .agent-card.c4 {
+        border-left-color: var(--stat-completed);
+      }
+
+      .agent-name {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .agent-role {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-foreground);
+        margin-bottom: 4px;
+      }
+      .agent-desc {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        line-height: 1.4;
+      }
+
+      /* ========================================
+     Timeline
+     ======================================== */
+      .timeline {
+        position: relative;
+        padding-left: 44px;
+      }
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 15px;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        background: var(--border);
+      }
+
+      .timeline-phase {
+        margin-bottom: 40px;
+      }
+
+      .timeline-phase-title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 20px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .timeline-phase-title::before {
+        content: "";
+        position: absolute;
+        left: -35px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid var(--background);
+      }
+      .timeline-phase-title.c-blue::before {
+        background: var(--stat-queue);
+      }
+      .timeline-phase-title.c-purple::before {
+        background: var(--stat-colors);
+      }
+      .timeline-phase-title.c-orange::before {
+        background: var(--stat-orders);
+      }
+      .timeline-phase-title.c-green::before {
+        background: var(--stat-completed);
+      }
+      .timeline-phase-title.c-foundation::before {
+        background: var(--primary);
+      }
+
+      .timeline-node {
+        position: relative;
+        margin-bottom: 20px;
+        padding: 14px 18px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .timeline-node::before {
+        content: "";
+        position: absolute;
+        left: -35px;
+        top: 18px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted-foreground);
+        border: 2px solid var(--background);
+      }
+
+      .timeline-cmd {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--primary);
+        margin-bottom: 6px;
+      }
+
+      .timeline-desc {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.5;
+      }
+
+      .timeline-badges {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .timeline-badge {
+        padding: 2px 10px;
+        background: var(--muted);
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ========================================
+     Loop Diagram
+     ======================================== */
+      .loop-flow {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        margin-bottom: 8px;
+      }
+      .loop-step {
+        padding: 6px 14px;
+        background: var(--muted);
+        border-radius: var(--radius);
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .loop-arrow {
+        font-size: 16px;
+        color: var(--muted-foreground);
+        padding: 0 6px;
+        opacity: 0.5;
+      }
+
+      /* ========================================
+     Stats Grid (Results Section)
+     ======================================== */
+      .stat-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px 20px;
+        text-align: center;
+      }
+      .stat-number {
+        font-size: 40px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        margin-bottom: 6px;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .stat-number.c-blue {
+        color: var(--stat-queue);
+      }
+      .stat-number.c-purple {
+        color: var(--stat-colors);
+      }
+      .stat-number.c-orange {
+        color: var(--stat-orders);
+      }
+      .stat-number.c-green {
+        color: var(--stat-completed);
+      }
+      .stat-number.c-primary {
+        color: var(--primary);
+      }
+
+      /* ========================================
+     Funnel Visualization
+     ======================================== */
+      .funnel {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        flex-wrap: wrap;
+        margin-top: 32px;
+        padding: 20px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .funnel-step {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--foreground);
+      }
+      .funnel-arrow {
+        color: var(--muted-foreground);
+        opacity: 0.4;
+        padding: 0 4px;
+      }
+
+      /* ========================================
+     Takeaway Cards
+     ======================================== */
+      .takeaway-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px 24px;
+      }
+      .takeaway-num {
+        font-size: 32px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+        margin-bottom: 10px;
+        opacity: 0.4;
+      }
+      .takeaway-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .takeaway-desc {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+      }
+
+      /* ========================================
+     Footer
+     ======================================== */
+      .footer {
+        text-align: center;
+        padding: 32px 24px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        border-top: 1px solid var(--border);
+        margin-top: 24px;
+      }
+      .footer a {
+        color: var(--primary);
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+
+      /* ========================================
+     Animations
+     ======================================== */
+      .animate-on-scroll {
+        opacity: 0;
+        transform: translateY(16px);
+        transition:
+          opacity 0.6s ease-out,
+          transform 0.6s ease-out;
+      }
+      .animate-on-scroll.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .stagger > .animate-on-scroll:nth-child(1) {
+        transition-delay: 0ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(2) {
+        transition-delay: 80ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(3) {
+        transition-delay: 160ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(4) {
+        transition-delay: 240ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(5) {
+        transition-delay: 320ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(6) {
+        transition-delay: 400ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(7) {
+        transition-delay: 480ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(8) {
+        transition-delay: 560ms;
+      }
+      .stagger > .animate-on-scroll:nth-child(9) {
+        transition-delay: 640ms;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .animate-on-scroll {
+          opacity: 1;
+          transform: none;
+          transition: none !important;
+        }
+        .scroll-hint {
+          animation: none;
+        }
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      /* ========================================
+     Context Card (project-context.md)
+     ======================================== */
+      .context-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin-top: 20px;
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .context-icon {
+        font-size: 28px;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+      .context-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .context-desc {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.5;
+      }
+      .context-tags {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .context-tag {
+        padding: 2px 8px;
+        background: var(--muted);
+        border-radius: 8px;
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+
+      /* ========================================
+     Workflow Map (adapted from BMAD docs)
+     ======================================== */
+      .wfmap {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-top: 8px;
+      }
+
+      .wfmap-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .wf-phase {
+        background: var(--background);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        border-top: 3px solid;
+        overflow: hidden;
+      }
+      .wf-phase.wf-analysis {
+        border-top-color: var(--stat-queue);
+      }
+      .wf-phase.wf-planning {
+        border-top-color: var(--stat-colors);
+      }
+      .wf-phase.wf-solutioning {
+        border-top-color: var(--stat-orders);
+      }
+      .wf-phase.wf-implementation {
+        border-top-color: var(--stat-completed);
+      }
+
+      .wf-phase-header {
+        padding: 10px 12px 8px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .wf-phase-num {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: white;
+      }
+      .wf-analysis .wf-phase-num {
+        background: var(--stat-queue);
+      }
+      .wf-planning .wf-phase-num {
+        background: var(--stat-colors);
+      }
+      .wf-solutioning .wf-phase-num {
+        background: var(--stat-orders);
+      }
+      .wf-implementation .wf-phase-num {
+        background: var(--stat-completed);
+      }
+
+      .wf-phase-title {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .wf-phase-opt {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: oklch(0.55 0.19 230 / 15%);
+        color: var(--stat-queue);
+        font-weight: 500;
+      }
+
+      .wf-workflows {
+        padding: 8px 10px;
+      }
+
+      .wf-item {
+        background: var(--muted);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+      .wf-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .wf-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+      .wf-item-name {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        color: var(--stat-completed);
+        background: oklch(0.55 0.19 155 / 12%);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .dark .wf-item-name {
+        background: oklch(0.65 0.18 155 / 15%);
+      }
+      .wf-item-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .wf-agent {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .wf-agent-icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: white;
+      }
+      .wf-agent-icon.wf-mary {
+        background: oklch(0.6 0.2 350);
+      }
+      .wf-agent-icon.wf-john {
+        background: var(--stat-queue);
+      }
+      .wf-agent-icon.wf-sally {
+        background: var(--stat-orders);
+        color: white;
+      }
+      .wf-agent-icon.wf-winston {
+        background: var(--stat-colors);
+      }
+      .wf-agent-icon.wf-bob {
+        background: var(--stat-completed);
+      }
+      .wf-agent-icon.wf-amelia {
+        background: oklch(0.6 0.2 25);
+      }
+
+      .wf-agent-name {
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .wf-output {
+        color: var(--stat-completed);
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 10px;
+      }
+      .wf-badge {
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-weight: 500;
+      }
+      .wf-badge.wf-opt {
+        background: oklch(0.62 0.22 50 / 15%);
+        color: var(--stat-orders);
+      }
+      .wf-badge.wf-iffy {
+        background: oklch(0.55 0.2 290 / 15%);
+        color: var(--stat-colors);
+      }
+      .wf-badge.wf-adhoc {
+        background: oklch(0.55 0.19 230 / 15%);
+        color: var(--stat-queue);
+      }
+
+      .wf-decision {
+        background: var(--stat-colors);
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 6px 0;
+        color: white;
+      }
+
+      .wf-quickflow {
+        background: var(--muted);
+        border: 2px dashed var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+      }
+      .wf-quickflow-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .wf-quickflow-header h3 {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .wf-quickflow-header span {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .wf-quickflow-body {
+        background: var(--background);
+        border-radius: 6px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .wf-context {
+        background: oklch(0.55 0.19 230 / 8%);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+      }
+      .wf-context-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .wf-context-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .wf-context-items span {
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+
+      .wf-legend {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        margin-top: 12px;
+        color: var(--muted-foreground);
+      }
+      .wf-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .wf-legend-dot {
+        width: 12px;
+        height: 3px;
+        border-radius: 2px;
+      }
+
+      .wf-arrow {
+        text-align: center;
+        color: var(--stat-orders);
+        font-size: 14px;
+        margin: 4px 0;
+        opacity: 0.6;
+      }
+
+      /* ========================================
+     Responsive
+     ======================================== */
+      @media (max-width: 900px) {
+        .grid-4 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .grid-3 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .hero-title {
+          font-size: 40px;
+        }
+        .hero-subtitle {
+          font-size: 16px;
+        }
+        .section {
+          padding: 90px 28px 48px;
+        }
+        .phase-flow {
+          gap: 4px;
+        }
+        .phase-node {
+          min-width: 110px;
+          font-size: 12px;
+          padding: 10px 14px;
+        }
+        .wfmap-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (max-width: 640px) {
+        html {
+          scroll-snap-type: y proximity;
+        }
+        .grid-4 {
+          grid-template-columns: 1fr;
+        }
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+        .hero-title {
+          font-size: 32px;
+        }
+        .hero-subtitle {
+          font-size: 15px;
+        }
+        .section {
+          padding: 80px 20px 40px;
+        }
+        .section-title {
+          font-size: 24px;
+        }
+        .section-subtitle {
+          font-size: 14px;
+        }
+        .nav {
+          padding: 8px 16px;
+        }
+        .nav-logo {
+          font-size: 13px;
+        }
+        .phase-flow {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .phase-arrow {
+          transform: rotate(90deg);
+          text-align: center;
+        }
+        .stat-number {
+          font-size: 32px;
+        }
+        .context-card {
+          flex-direction: column;
+          gap: 8px;
+        }
+        .loop-flow {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .loop-arrow {
+          transform: rotate(90deg);
+          text-align: center;
+        }
+        .wfmap-grid {
+          grid-template-columns: 1fr;
+        }
+        .wf-quickflow-body {
+          flex-direction: column;
+        }
+        .funnel {
+          flex-direction: column;
+        }
+        .funnel-arrow {
+          transform: rotate(90deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ========================================
+     Navigation
+     ======================================== -->
+    <nav class="nav">
+      <span class="nav-logo">3D Print Flow</span>
+      <div class="nav-pills">
+        <button class="nav-pill active" data-section="hero">Intro</button>
+        <button class="nav-pill" data-section="about">The App</button>
+        <button class="nav-pill" data-section="bmad">BMAD</button>
+        <button class="nav-pill" data-section="workflow">Workflow</button>
+        <button class="nav-pill" data-section="journey">Journey</button>
+        <button class="nav-pill" data-section="tools">Tools</button>
+        <button class="nav-pill" data-section="overhaul">UI/UX</button>
+        <button class="nav-pill" data-section="results">Results</button>
+        <button class="nav-pill" data-section="takeaways">Takeaways</button>
+      </div>
+      <button class="theme-toggle" aria-label="Toggle dark mode"></button>
+    </nav>
+
+    <!-- ========================================
+     Section 1: Hero
+     ======================================== -->
+    <section class="section hero" id="hero">
+      <div class="animate-on-scroll">
+        <span class="section-label">BMAD Method Case Study</span>
+      </div>
+      <h1 class="hero-title animate-on-scroll">3D Print Flow</h1>
+      <p class="hero-subtitle animate-on-scroll">
+        How AI-powered development and the BMAD method built a refined,
+        production-grade product from scratch
+      </p>
+      <p class="hero-sub2 animate-on-scroll">
+        From 47 brainstorming ideas to a fully shipped app &mdash; every line of
+        code written by AI agents
+      </p>
+      <div class="hero-stats animate-on-scroll">
+        <span class="hero-stat"><strong>42</strong> commits</span>
+        <span class="hero-stat"><strong>19</strong> stories</span>
+        <span class="hero-stat"><strong>5/5</strong> PRD quality</span>
+        <span class="hero-stat"><strong>4</strong> epics</span>
+      </div>
+      <div class="scroll-hint animate-on-scroll">&darr; Scroll to explore</div>
+    </section>
+
+    <!-- ========================================
+     Section 2: What is 3D Print Flow?
+     ======================================== -->
+    <section class="section" id="about">
+      <span class="section-label animate-on-scroll">The Product</span>
+      <h2 class="section-title animate-on-scroll">What is 3D Print Flow?</h2>
+      <p class="section-subtitle animate-on-scroll">
+        A local-first web app for 3D printing color-first workflow management.
+        No backend, no cloud, no accounts &mdash; just IndexedDB persistence and
+        JSON export.
+      </p>
+
+      <div class="callout animate-on-scroll">
+        &ldquo;What can I print with the spool loaded right now?&rdquo; instead
+        of &ldquo;What figure should I print next?&rdquo;
+      </div>
+
+      <div class="grid-4 stagger">
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#127912;</span>
+          <div class="card-title">Color-First Planning</div>
+          <div class="card-desc">
+            Ranked list of filament colors sorted by queue demand. Load a spool,
+            see everything you can print.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#9898;</span>
+          <div class="card-title">Per-Figure Color Chips</div>
+          <div class="card-desc">
+            Tap to mark a color as printed. Progress fills as each chip is
+            toggled. The signature interaction.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#128225;</span>
+          <div class="card-title">Local-First Architecture</div>
+          <div class="card-desc">
+            No backend, no cloud, no accounts. All data stays in IndexedDB with
+            JSON export for backup.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#9889;</span>
+          <div class="card-title">Zero Loading Spinners</div>
+          <div class="card-desc">
+            In-memory state with write-behind persistence. Every operation is
+            instant from the user's perspective.
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-pills animate-on-scroll">
+        <span class="tech-pill">React Router v7</span>
+        <span class="tech-pill">TypeScript (strict)</span>
+        <span class="tech-pill">Tailwind CSS v4</span>
+        <span class="tech-pill">shadcn/ui</span>
+        <span class="tech-pill">React Compiler</span>
+        <span class="tech-pill">Zustand</span>
+        <span class="tech-pill">IndexedDB</span>
+        <span class="tech-pill">Vite 7</span>
+        <span class="tech-pill">Vitest</span>
+      </div>
+
+      <div class="context-card animate-on-scroll">
+        <span class="context-icon">&#128220;</span>
+        <div>
+          <div class="context-title">
+            project-context.md &mdash; The Constitutional Document
+          </div>
+          <div class="context-desc">
+            Created upfront via
+            <span class="slash-cmd">/bmad-generate-project-context</span>, this
+            file encodes the developer's coding standards so every AI agent
+            follows the same patterns throughout the entire build.
+          </div>
+          <div class="context-tags">
+            <span class="context-tag">SOLID</span>
+            <span class="context-tag">DRY</span>
+            <span class="context-tag">KISS</span>
+            <span class="context-tag">strict TypeScript</span>
+            <span class="context-tag">minimal useEffect</span>
+            <span class="context-tag">Tailwind-only styling</span>
+            <span class="context-tag">React Compiler rules</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section 3: What is BMAD?
+     ======================================== -->
+    <section class="section" id="bmad">
+      <span class="section-label animate-on-scroll">The Method</span>
+      <h2 class="section-title animate-on-scroll">The BMAD Method</h2>
+      <p class="section-subtitle animate-on-scroll">
+        <strong>B</strong>uild <strong>M</strong>ore <strong>A</strong>rchitect
+        <strong>D</strong>reams &mdash; an AI-driven development framework that
+        guides you from ideation through agentic implementation.
+      </p>
+
+      <div class="phase-flow animate-on-scroll">
+        <div class="phase-node analysis">Analysis</div>
+        <span class="phase-arrow">&rarr;</span>
+        <div class="phase-node planning">Planning</div>
+        <span class="phase-arrow">&rarr;</span>
+        <div class="phase-node solutioning">Solutioning</div>
+        <span class="phase-arrow">&rarr;</span>
+        <div class="phase-node implementation">Implementation</div>
+      </div>
+
+      <div
+        class="callout callout-neutral animate-on-scroll"
+        style="margin-bottom: 28px"
+      >
+        Vague thinking upstream leads to vague artifacts downstream. Rigorous
+        upfront analysis prevents downstream problems.
+      </div>
+
+      <h3
+        class="animate-on-scroll"
+        style="font-size: 16px; font-weight: 600; margin-bottom: 16px"
+      >
+        9 Specialized Agent Personas
+      </h3>
+
+      <div class="grid-3 stagger">
+        <div class="agent-card animate-on-scroll">
+          <div class="agent-name">Mary</div>
+          <div class="agent-role">Analyst</div>
+          <div class="agent-desc">
+            Brainstorming, research, product briefs, project documentation
+          </div>
+        </div>
+        <div class="agent-card c2 animate-on-scroll">
+          <div class="agent-name">John</div>
+          <div class="agent-role">Product Manager</div>
+          <div class="agent-desc">
+            PRD development, epic/story creation, course correction
+          </div>
+        </div>
+        <div class="agent-card c3 animate-on-scroll">
+          <div class="agent-name">Sally</div>
+          <div class="agent-role">UX Designer</div>
+          <div class="agent-desc">
+            User experience design, interaction patterns, accessibility
+          </div>
+        </div>
+        <div class="agent-card c4 animate-on-scroll">
+          <div class="agent-name">Winston</div>
+          <div class="agent-role">Architect</div>
+          <div class="agent-desc">
+            System architecture, technical design, readiness assessment
+          </div>
+        </div>
+        <div class="agent-card animate-on-scroll">
+          <div class="agent-name">Bob</div>
+          <div class="agent-role">Scrum Master</div>
+          <div class="agent-desc">
+            Sprint planning, story creation, retrospectives
+          </div>
+        </div>
+        <div class="agent-card c2 animate-on-scroll">
+          <div class="agent-name">Amelia</div>
+          <div class="agent-role">Developer</div>
+          <div class="agent-desc">
+            Story execution, code implementation with strict spec adherence
+          </div>
+        </div>
+        <div class="agent-card c3 animate-on-scroll">
+          <div class="agent-name">Quinn</div>
+          <div class="agent-role">QA Engineer</div>
+          <div class="agent-desc">
+            Test automation, coverage analysis, quality assurance
+          </div>
+        </div>
+        <div class="agent-card c4 animate-on-scroll">
+          <div class="agent-name">Barry</div>
+          <div class="agent-role">Quick Flow Dev</div>
+          <div class="agent-desc">
+            Rapid development combining clarification, implementation &amp;
+            review
+          </div>
+        </div>
+        <div class="agent-card animate-on-scroll">
+          <div class="agent-name">Paige</div>
+          <div class="agent-role">Technical Writer</div>
+          <div class="agent-desc">
+            Documentation, standards, diagrams, concept explanations
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section: BMAD Workflow Map
+     ======================================== -->
+    <section class="section tall" id="workflow">
+      <span class="section-label animate-on-scroll">The Workflow</span>
+      <h2 class="section-title animate-on-scroll">BMAD Workflow Map</h2>
+      <p class="section-subtitle animate-on-scroll">
+        How documents flow between phases and agents. Each artifact becomes
+        context for the next step.
+      </p>
+
+      <div class="wfmap animate-on-scroll">
+        <div class="wfmap-grid">
+          <!-- Phase 1: Analysis -->
+          <div class="wf-phase wf-analysis">
+            <div class="wf-phase-header">
+              <div class="wf-phase-num">1</div>
+              <div class="wf-phase-title">Analysis</div>
+              <span class="wf-phase-opt">Optional</span>
+            </div>
+            <div class="wf-workflows">
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">brainstorm</span>
+                  <span class="wf-badge wf-opt">opt</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-mary">M</div>
+                    <span class="wf-agent-name">Mary</span>
+                  </div>
+                  <span class="wf-output">brainstorming-report.md</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">research</span>
+                  <span class="wf-badge wf-opt">opt</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-mary">M</div>
+                    <span class="wf-agent-name">Mary</span>
+                  </div>
+                  <span class="wf-output">findings</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">product-brief</span>
+                  <span class="wf-badge wf-opt">or &darr;</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-mary">M</div>
+                    <span class="wf-agent-name">Mary</span>
+                  </div>
+                  <span class="wf-output">product-brief.md &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">prfaq</span>
+                  <span class="wf-badge wf-opt">or &uarr;</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-mary">M</div>
+                    <span class="wf-agent-name">Mary</span>
+                  </div>
+                  <span class="wf-output">prfaq.md &rarr;</span>
+                </div>
+              </div>
+            </div>
+            <div class="wf-arrow">&rarr;</div>
+          </div>
+
+          <!-- Phase 2: Planning -->
+          <div class="wf-phase wf-planning">
+            <div class="wf-phase-header">
+              <div class="wf-phase-num">2</div>
+              <div class="wf-phase-title">Planning</div>
+            </div>
+            <div class="wf-workflows">
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">create-prd</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-john">J</div>
+                    <span class="wf-agent-name">John</span>
+                  </div>
+                  <span class="wf-output">PRD.md &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-decision">Has UI?</div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">create-ux-design</span>
+                  <span class="wf-badge wf-iffy">if yes</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-sally">S</div>
+                    <span class="wf-agent-name">Sally</span>
+                  </div>
+                  <span class="wf-output">ux-spec.md &rarr;</span>
+                </div>
+              </div>
+            </div>
+            <div class="wf-arrow">&rarr;</div>
+          </div>
+
+          <!-- Phase 3: Solutioning -->
+          <div class="wf-phase wf-solutioning">
+            <div class="wf-phase-header">
+              <div class="wf-phase-num">3</div>
+              <div class="wf-phase-title">Solutioning</div>
+            </div>
+            <div class="wf-workflows">
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">create-architecture</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-winston">W</div>
+                    <span class="wf-agent-name">Winston</span>
+                  </div>
+                  <span class="wf-output">architecture.md &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">create-epics-and-stories</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-john">J</div>
+                    <span class="wf-agent-name">John</span>
+                  </div>
+                  <span class="wf-output">epics.md &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name"
+                    >check-implementation-readiness</span
+                  >
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-john">J</div>
+                    <span class="wf-agent-name">John</span>
+                  </div>
+                  <span class="wf-output">gate check</span>
+                </div>
+              </div>
+            </div>
+            <div class="wf-arrow">&rarr;</div>
+          </div>
+
+          <!-- Phase 4: Implementation -->
+          <div class="wf-phase wf-implementation">
+            <div class="wf-phase-header">
+              <div class="wf-phase-num">4</div>
+              <div class="wf-phase-title">Implementation</div>
+            </div>
+            <div class="wf-workflows">
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">sprint-planning</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-bob">B</div>
+                    <span class="wf-agent-name">Bob</span>
+                  </div>
+                  <span class="wf-output">sprint-status.yaml &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">create-story</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-bob">B</div>
+                    <span class="wf-agent-name">Bob</span>
+                  </div>
+                  <span class="wf-output">story-[slug].md &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">dev-story</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-amelia">A</div>
+                    <span class="wf-agent-name">Amelia</span>
+                  </div>
+                  <span class="wf-output">code &rarr;</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">code-review</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-amelia">A</div>
+                    <span class="wf-agent-name">Amelia</span>
+                  </div>
+                  <span class="wf-output">approve</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">correct-course</span>
+                  <span class="wf-badge wf-adhoc">ad-hoc</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-john">J</div>
+                    <span class="wf-agent-name">John</span>
+                  </div>
+                  <span class="wf-output">updated plan</span>
+                </div>
+              </div>
+              <div class="wf-item">
+                <div class="wf-item-header">
+                  <span class="wf-item-name">retrospective</span>
+                  <span class="wf-badge wf-adhoc">per epic</span>
+                </div>
+                <div class="wf-item-meta">
+                  <div class="wf-agent">
+                    <div class="wf-agent-icon wf-bob">B</div>
+                    <span class="wf-agent-name">Bob</span>
+                  </div>
+                  <span class="wf-output">lessons</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Flow -->
+        <div class="wf-quickflow">
+          <div class="wf-quickflow-header">
+            <span>&#9889;</span>
+            <div>
+              <h3>Quick Flow (Parallel Track)</h3>
+              <span
+                >For small, well-understood changes &mdash; skip phases
+                1&ndash;3</span
+              >
+            </div>
+          </div>
+          <div class="wf-quickflow-body">
+            <div class="wf-agent">
+              <div
+                class="wf-agent-icon"
+                style="background: var(--muted-foreground)"
+              >
+                B
+              </div>
+              <span class="wf-agent-name">Barry</span>
+            </div>
+            <span class="wf-item-name">quick-dev</span>
+            <span style="font-size: 11px; color: var(--muted-foreground)"
+              >intent &rarr; tech-spec &rarr; working code</span
+            >
+          </div>
+        </div>
+
+        <!-- Context Flow -->
+        <div class="wf-context">
+          <div class="wf-context-header">&#128218; Context Flow</div>
+          <p
+            style="
+              margin-bottom: 8px;
+              color: var(--muted-foreground);
+              font-size: 12px;
+            "
+          >
+            Each document becomes context for the next phase.
+          </p>
+          <div class="wf-context-items">
+            <span
+              ><span class="wf-item-name">create-story</span>
+              <span>loads epics, PRD, architecture, UX</span></span
+            >
+            <span
+              ><span class="wf-item-name">dev-story</span>
+              <span>loads story file</span></span
+            >
+            <span
+              ><span class="wf-item-name">code-review</span>
+              <span>loads architecture, story</span></span
+            >
+            <span
+              ><span class="wf-item-name">quick-dev</span>
+              <span>clarify, plan, implement, review</span></span
+            >
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="wf-legend">
+          <div class="wf-legend-item">
+            <div
+              class="wf-legend-dot"
+              style="background: var(--stat-queue)"
+            ></div>
+            Analysis
+          </div>
+          <div class="wf-legend-item">
+            <div
+              class="wf-legend-dot"
+              style="background: var(--stat-colors)"
+            ></div>
+            Planning
+          </div>
+          <div class="wf-legend-item">
+            <div
+              class="wf-legend-dot"
+              style="background: var(--stat-orders)"
+            ></div>
+            Solutioning
+          </div>
+          <div class="wf-legend-item">
+            <div
+              class="wf-legend-dot"
+              style="background: var(--stat-completed)"
+            ></div>
+            Implementation
+          </div>
+        </div>
+      </div>
+
+      <p
+        class="animate-on-scroll"
+        style="
+          font-size: 12px;
+          color: var(--muted-foreground);
+          margin-top: 12px;
+          text-align: center;
+        "
+      >
+        Adapted from
+        <a
+          href="https://docs.bmad-method.org/workflow-map-diagram.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="color: var(--primary); text-decoration: none"
+          >BMAD Workflow Map V6</a
+        >
+      </p>
+    </section>
+
+    <!-- ========================================
+     Section 5: The BMAD Journey
+     ======================================== -->
+    <section class="section tall" id="journey">
+      <span class="section-label animate-on-scroll">The Process</span>
+      <h2 class="section-title animate-on-scroll">
+        The BMAD Journey &mdash; Phase by Phase
+      </h2>
+      <p class="section-subtitle animate-on-scroll">
+        Every slash command used in building 3D Print Flow, from the first
+        brainstorm to the last code review.
+      </p>
+
+      <div class="timeline">
+        <!-- Foundation -->
+        <div class="timeline-phase animate-on-scroll">
+          <div class="timeline-phase-title c-foundation">Foundation</div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-generate-project-context</div>
+          <div class="timeline-desc">
+            Created the constitutional document encoding coding standards
+            &mdash; SOLID, DRY, KISS, strict TypeScript, React Compiler rules,
+            minimal useEffect, Tailwind-only styling. Every subsequent agent
+            inherits these constraints.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">project-context.md</span>
+          </div>
+        </div>
+
+        <!-- Analysis Phase -->
+        <div class="timeline-phase animate-on-scroll">
+          <div class="timeline-phase-title c-blue">Analysis Phase</div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-brainstorming</div>
+          <div class="timeline-desc">
+            Facilitated structured creative session using 5 proven ideation
+            techniques. Generated 47 ideas exploring color-first workflows, edge
+            cases, and UX patterns.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">47 ideas</span>
+            <span class="timeline-badge">Role Playing</span>
+            <span class="timeline-badge">SCAMPER</span>
+            <span class="timeline-badge">Reverse Brainstorming</span>
+            <span class="timeline-badge">Question Storming</span>
+            <span class="timeline-badge">Morphological Analysis</span>
+          </div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-product-brief</div>
+          <div class="timeline-desc">
+            Executive summary defining the problem, solution, target user (solo
+            3D printing maker), and success criteria. The concise foundation for
+            everything that follows.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">Problem statement</span>
+            <span class="timeline-badge">Target user</span>
+            <span class="timeline-badge">Success criteria</span>
+          </div>
+        </div>
+
+        <!-- Planning Phase -->
+        <div class="timeline-phase animate-on-scroll">
+          <div class="timeline-phase-title c-purple">Planning Phase</div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-create-prd</div>
+          <div class="timeline-desc">
+            Comprehensive Product Requirements Document spanning 6 functional
+            domains with detailed user journeys, phased into MVP, Growth, and
+            Vision milestones.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">42 Functional Reqs</span>
+            <span class="timeline-badge">11 Non-Functional Reqs</span>
+            <span class="timeline-badge">6 User Journeys</span>
+          </div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-validate-prd</div>
+          <div class="timeline-desc">
+            Rigorous 12-step validation against quality standards. Checked
+            format, density, brief coverage, measurability, traceability,
+            implementation leakage, domain compliance, and more.
+          </div>
+          <div class="timeline-badges">
+            <span
+              class="timeline-badge"
+              style="color: var(--stat-completed); font-weight: 700"
+              >5/5 Quality Rating</span
+            >
+            <span class="timeline-badge">Zero violations</span>
+            <span class="timeline-badge">12 validation steps</span>
+          </div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-create-ux-design</div>
+          <div class="timeline-desc">
+            UX patterns including emotional design, chip toggle interactions,
+            responsive layout, and accessibility guidelines. Produced both a
+            specification doc and an interactive HTML design directions file.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">Interaction patterns</span>
+            <span class="timeline-badge">Responsive layout</span>
+            <span class="timeline-badge">WCAG AA target</span>
+          </div>
+        </div>
+
+        <!-- Solutioning Phase -->
+        <div class="timeline-phase animate-on-scroll">
+          <div class="timeline-phase-title c-orange">Solutioning Phase</div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-create-architecture</div>
+          <div class="timeline-desc">
+            Designed 18 architectural components with entity relationships,
+            cross-cutting concerns, and NFR-driven decisions. In-memory state as
+            source of truth with write-behind IndexedDB persistence.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">18 components</span>
+            <span class="timeline-badge">Entity relationships</span>
+            <span class="timeline-badge">Cross-cutting concerns</span>
+          </div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-create-epics-and-stories</div>
+          <div class="timeline-desc">
+            Broke the PRD into actionable work units with detailed acceptance
+            criteria, task breakdowns, and dependency mapping.
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">4 Epics</span>
+            <span class="timeline-badge">19 Stories</span>
+            <span class="timeline-badge">Acceptance criteria</span>
+          </div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">/bmad-check-implementation-readiness</div>
+          <div class="timeline-desc">
+            Final checkpoint validating PRD, UX, Architecture, and Epics are
+            complete, consistent, and ready for development. Zero missing
+            documents, zero blocking issues.
+          </div>
+          <div class="timeline-badges">
+            <span
+              class="timeline-badge"
+              style="color: var(--stat-completed); font-weight: 700"
+              >All specs validated</span
+            >
+            <span class="timeline-badge">Ready to build</span>
+          </div>
+        </div>
+
+        <!-- Implementation Phase -->
+        <div class="timeline-phase animate-on-scroll">
+          <div class="timeline-phase-title c-green">Implementation Phase</div>
+        </div>
+        <div class="timeline-node animate-on-scroll">
+          <div class="timeline-cmd">The BMAD Loop</div>
+          <div class="timeline-desc">
+            Automated orchestration running the story pipeline for each of the
+            19 stories. Each story goes through creation, development, and a
+            3-pass adversarial code review.
+          </div>
+          <div class="loop-flow">
+            <span class="loop-step">/bmad-create-story</span>
+            <span class="loop-arrow">&rarr;</span>
+            <span class="loop-step">/bmad-dev-story</span>
+            <span class="loop-arrow">&rarr;</span>
+            <span class="loop-step">/bmad-code-review</span>
+            <span class="loop-arrow">&rarr;</span>
+            <span
+              class="loop-step"
+              style="background: var(--stat-completed); color: white"
+              >Merge</span
+            >
+          </div>
+          <div class="timeline-badges">
+            <span class="timeline-badge">3-pass adversarial review</span>
+            <span class="timeline-badge">Automated orchestration</span>
+            <span class="timeline-badge">Sprint tracking via YAML</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section 5: Beyond BMAD
+     ======================================== -->
+    <section class="section" id="tools">
+      <span class="section-label animate-on-scroll">The Ecosystem</span>
+      <h2 class="section-title animate-on-scroll">
+        Beyond BMAD &mdash; AI Skills &amp; MCP Servers
+      </h2>
+      <p class="section-subtitle animate-on-scroll">
+        BMAD provided the structure. These additional tools amplified the
+        quality, automation, and design refinement.
+      </p>
+
+      <div class="grid-3 stagger" style="margin-bottom: 16px">
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#127912;</span>
+          <div class="card-title">
+            <span class="slash-cmd">/frontend-design</span>
+          </div>
+          <div class="card-desc">
+            Creative, polished frontend code generation. Produces distinctive UI
+            code that avoids generic AI aesthetics. Used extensively during the
+            visual overhaul.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#128269;</span>
+          <div class="card-title"><span class="slash-cmd">/audit</span></div>
+          <div class="card-desc">
+            Technical quality checks across accessibility, performance, theming,
+            and responsive design. Generates scored reports with P0&ndash;P3
+            severity ratings.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#9881;</span>
+          <div class="card-title">shadcn MCP Server</div>
+          <div class="card-desc">
+            Direct integration with the component library. Discovers, searches,
+            and installs shadcn/ui components without leaving the development
+            flow.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#128025;</span>
+          <div class="card-title">GitHub MCP Server</div>
+          <div class="card-desc">
+            Automated commits, pushes, PR creation, and issue management. Opened
+            epics as GitHub issues and tracked work through the entire pipeline.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#128396;</span>
+          <div class="card-title">
+            <span class="slash-cmd">/teach-impeccable</span>
+          </div>
+          <div class="card-desc">
+            One-time design context setup. Saved brand personality, design
+            principles, and accessibility guidelines to
+            <code>.impeccable.md</code> for persistent design intelligence.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <span class="card-icon">&#9889;</span>
+          <div class="card-title">
+            <span class="slash-cmd">/vercel-react-best-practices</span>
+          </div>
+          <div class="card-desc">
+            React &amp; Next.js performance guidelines from Vercel Engineering.
+            Used to review and validate code changes follow optimal patterns
+            &mdash; React Compiler rules, hook usage, and more.
+          </div>
+        </div>
+      </div>
+
+      <div class="callout callout-neutral animate-on-scroll">
+        The <span class="slash-cmd">project-context.md</span> created via
+        <span class="slash-cmd">/bmad-generate-project-context</span> served as
+        the foundation for all of these tools &mdash; encoding SOLID/DRY/KISS,
+        strict TypeScript, minimal useEffect, React Compiler rules, and
+        Tailwind-only styling so every agent and skill operated within the same
+        constraints.
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section 6: The UI/UX Overhaul
+     ======================================== -->
+    <section class="section" id="overhaul">
+      <span class="section-label animate-on-scroll">The Polish</span>
+      <h2 class="section-title animate-on-scroll">The UI/UX Overhaul</h2>
+      <p class="section-subtitle animate-on-scroll">
+        A comprehensive visual refresh on a dedicated feature branch, driven by
+        the interplay of multiple design skills.
+      </p>
+
+      <div
+        class="hero-stats animate-on-scroll"
+        style="margin-bottom: 32px; justify-content: flex-start"
+      >
+        <span class="hero-stat"><strong>21</strong> files modified</span>
+        <span class="hero-stat"
+          ><strong>feat/ui-design-overhaul</strong> branch</span
+        >
+        <span class="hero-stat"><strong>Multiple</strong> review passes</span>
+      </div>
+
+      <div class="grid-2 stagger">
+        <div class="card animate-on-scroll">
+          <div class="card-title">OKLCH Color System</div>
+          <div class="card-desc">
+            Migrated to warm-tinted neutrals using OKLCH (hue 50&ndash;65 for
+            warm range). Not cool gray, not clinical. Let the user's filament
+            colors shine while the UI chrome recedes with workshop warmth.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <div class="card-title">Enhanced Accessibility</div>
+          <div class="card-desc">
+            WCAG AA target with proper contrast ratios, focus indicators,
+            semantic HTML, and reduced-motion support. Every interaction is
+            usable with keyboard and screen readers.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <div class="card-title">Typography &amp; Animations</div>
+          <div class="card-desc">
+            Purposeful micro-interactions: <code>fade-in-up</code> (400ms),
+            <code>slide-in</code> (300ms),
+            <code>completion-pulse</code> (500ms). All respect
+            <code>prefers-reduced-motion</code>. Inter Variable for clean,
+            readable text.
+          </div>
+        </div>
+        <div class="card animate-on-scroll">
+          <div class="card-title">Design Skill Interplay</div>
+          <div class="card-desc">
+            <span class="slash-cmd">/frontend-design</span> generated the code,
+            <span class="slash-cmd">/audit</span> validated quality scores,
+            <code>.impeccable.md</code> provided persistent design context, and
+            <span class="slash-cmd">/vercel-react-best-practices</span> ensured
+            optimal React patterns.
+          </div>
+        </div>
+      </div>
+
+      <div class="callout animate-on-scroll" style="margin-top: 24px">
+        &ldquo;Useful, warm, colorful. A utilitarian workshop tool with a heart.
+        Not cold and clinical &mdash; it should feel like a well-organized craft
+        bench, not enterprise software.&rdquo;
+        <div
+          style="
+            font-size: 12px;
+            font-style: normal;
+            color: var(--muted-foreground);
+            margin-top: 6px;
+          "
+        >
+          &mdash; .impeccable.md, Brand Personality
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section 7: Results & Key Numbers
+     ======================================== -->
+    <section class="section" id="results">
+      <span class="section-label animate-on-scroll">The Outcome</span>
+      <h2 class="section-title animate-on-scroll">Results &amp; Key Numbers</h2>
+      <p class="section-subtitle animate-on-scroll">
+        The full funnel from ideation to shipped product &mdash; every number
+        backed by real project artifacts.
+      </p>
+
+      <div class="grid-4 stagger">
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-blue">47</div>
+          <div class="stat-label">Brainstorming Ideas</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-purple">42</div>
+          <div class="stat-label">Functional Requirements</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-orange">4</div>
+          <div class="stat-label">Epics</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-green">19</div>
+          <div class="stat-label">Stories Completed</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-primary">42</div>
+          <div class="stat-label">Commits</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-green">5/5</div>
+          <div class="stat-label">PRD Quality Score</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-blue">0</div>
+          <div class="stat-label">Loading Spinners</div>
+        </div>
+        <div class="stat-card animate-on-scroll">
+          <div class="stat-number c-purple">AA</div>
+          <div class="stat-label">WCAG Accessibility</div>
+        </div>
+      </div>
+
+      <div class="funnel animate-on-scroll">
+        <span class="funnel-step">Ideas</span>
+        <span class="funnel-arrow">&rarr;</span>
+        <span class="funnel-step">Requirements</span>
+        <span class="funnel-arrow">&rarr;</span>
+        <span class="funnel-step">Epics</span>
+        <span class="funnel-arrow">&rarr;</span>
+        <span class="funnel-step">Stories</span>
+        <span class="funnel-arrow">&rarr;</span>
+        <span class="funnel-step">Commits</span>
+        <span class="funnel-arrow">&rarr;</span>
+        <span
+          class="funnel-step"
+          style="font-weight: 700; color: var(--stat-completed)"
+          >Shipped</span
+        >
+      </div>
+    </section>
+
+    <!-- ========================================
+     Section 8: Key Takeaways
+     ======================================== -->
+    <section class="section" id="takeaways">
+      <span class="section-label animate-on-scroll">The Learnings</span>
+      <h2 class="section-title animate-on-scroll">Key Takeaways</h2>
+      <p class="section-subtitle animate-on-scroll">
+        What building an entire product with BMAD and AI skills revealed about
+        the future of software development.
+      </p>
+
+      <div class="grid-2 stagger">
+        <div class="takeaway-card animate-on-scroll">
+          <div class="takeaway-num">01</div>
+          <div class="takeaway-title">
+            BMAD provides structure that AI alone lacks
+          </div>
+          <div class="takeaway-desc">
+            Without systematic phases, AI produces scattered, inconsistent
+            output. BMAD channels AI capability through proven software
+            engineering methodology &mdash; brainstorming, requirements,
+            architecture, implementation &mdash; so nothing falls through the
+            cracks.
+          </div>
+        </div>
+        <div class="takeaway-card animate-on-scroll">
+          <div class="takeaway-num">02</div>
+          <div class="takeaway-title">
+            Rigorous planning produces refined output
+          </div>
+          <div class="takeaway-desc">
+            47 ideas distilled through 12 PRD validation steps into a 5/5
+            quality spec. The implementation inherits this quality. Vague
+            thinking upstream means vague artifacts downstream &mdash; BMAD
+            enforces rigor at every stage.
+          </div>
+        </div>
+        <div class="takeaway-card animate-on-scroll">
+          <div class="takeaway-num">03</div>
+          <div class="takeaway-title">
+            Specialized agents bring domain expertise
+          </div>
+          <div class="takeaway-desc">
+            9 agent personas each bring focused perspective. Mary the Analyst
+            thinks differently than Winston the Architect. This specialization
+            mirrors real team dynamics and produces richer, more considered
+            output than a single generalist AI.
+          </div>
+        </div>
+        <div class="takeaway-card animate-on-scroll">
+          <div class="takeaway-num">04</div>
+          <div class="takeaway-title">
+            Method + Skills + MCP = production-grade results
+          </div>
+          <div class="takeaway-desc">
+            BMAD for structure, AI skills (/frontend-design, /audit,
+            /vercel-react-best-practices) for execution quality, MCP servers
+            (shadcn, GitHub) for seamless automation. The combination exceeds
+            what any single tool achieves alone.
+          </div>
+        </div>
+      </div>
+
+      <footer class="footer animate-on-scroll">
+        Built with the
+        <a
+          href="https://docs.bmad-method.org/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >BMAD Method</a
+        >
+        &nbsp;&middot;&nbsp;
+        <a
+          href="https://github.com/Paolo-DM/3d-print-flow"
+          target="_blank"
+          rel="noopener noreferrer"
+          >View on GitHub</a
+        >
+      </footer>
+    </section>
+
+    <!-- ========================================
+     JavaScript
+     ======================================== -->
+    <script>
+      // --- Theme Toggle ---
+      const root = document.documentElement
+      const toggleBtn = document.querySelector(".theme-toggle")
+
+      function setTheme(dark) {
+        root.classList.toggle("dark", dark)
+        localStorage.setItem("pf-theme", dark ? "dark" : "light")
+        toggleBtn.textContent = dark ? "\u2600\uFE0F" : "\uD83C\uDF19"
+        toggleBtn.setAttribute(
+          "aria-label",
+          dark ? "Switch to light mode" : "Switch to dark mode"
+        )
+      }
+
+      const saved = localStorage.getItem("pf-theme")
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches
+      setTheme(saved ? saved === "dark" : prefersDark)
+
+      toggleBtn.addEventListener("click", () => {
+        setTheme(!root.classList.contains("dark"))
+      })
+
+      // --- Scroll-Spy ---
+      const sections = document.querySelectorAll(".section[id]")
+      const pills = document.querySelectorAll(".nav-pill")
+
+      function updateNav() {
+        let current = 0
+        sections.forEach((section, i) => {
+          if (section.getBoundingClientRect().top < 200) current = i
+        })
+        pills.forEach((pill, i) =>
+          pill.classList.toggle("active", i === current)
+        )
+      }
+
+      window.addEventListener("scroll", updateNav, { passive: true })
+
+      pills.forEach((pill) => {
+        pill.addEventListener("click", () => {
+          const target = document.getElementById(pill.dataset.section)
+          if (target)
+            target.scrollIntoView({ behavior: "smooth", block: "start" })
+        })
+      })
+
+      // --- Scroll Animations ---
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("visible")
+            }
+          })
+        },
+        { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
+      )
+
+      document
+        .querySelectorAll(".animate-on-scroll")
+        .forEach((el) => observer.observe(el))
+    </script>
+  </body>
+</html>
