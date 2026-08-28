@@ -139,7 +139,7 @@ function BrandGroupedCatalog({
               className={cn(
                 "rounded-full border px-3 py-1.5 text-sm transition-colors",
                 selected
-                  ? "border-transparent bg-accent"
+                  ? "border-transparent bg-accent text-accent-foreground"
                   : "border-border bg-card text-muted-foreground"
               )}
               data-testid={`brand-filter-${group.id}`}

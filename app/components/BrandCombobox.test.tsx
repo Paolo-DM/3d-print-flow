@@ -11,6 +11,12 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createBrand } from "~/lib/test-utils"
 import { BrandCombobox, type BrandSelection } from "~/components/BrandCombobox"
 import type { Brand } from "~/lib/types"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+} from "~/components/ui/drawer"
 
 afterEach(cleanup)
 
@@ -82,6 +88,51 @@ describe("BrandCombobox", () => {
     const options = screen.getAllByRole("option")
     const labels = options.map((o) => o.textContent)
     expect(labels).toEqual(["No brand", "Marvel", "Naruto", "One Piece"])
+  })
+
+  it("allows wheel input on the native-scroll options list inside a modal drawer", () => {
+    const manyBrands = brandsMap(
+      ...Array.from({ length: 20 }, (_, index) =>
+        createBrand({ id: `b-${index}`, name: `Brand ${index}` })
+      )
+    )
+    render(
+      <Drawer open>
+        <DrawerContent>
+          <DrawerTitle>Figure</DrawerTitle>
+          <DrawerDescription>Edit figure details.</DrawerDescription>
+          <BrandCombobox
+            brands={manyBrands}
+            value={{ kind: "none" }}
+            onChange={vi.fn()}
+          />
+        </DrawerContent>
+      </Drawer>
+    )
+    openCombobox()
+
+    const listbox = screen.getByRole("listbox")
+    expect(listbox.classList.contains("max-h-56")).toBe(true)
+    expect(listbox.classList.contains("overflow-y-auto")).toBe(true)
+    listbox.style.overflowY = "auto"
+    Object.defineProperties(listbox, {
+      clientHeight: { configurable: true, value: 224 },
+      scrollHeight: { configurable: true, value: 800 },
+    })
+
+    const wheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 40,
+    })
+    listbox.dispatchEvent(wheel)
+
+    expect(wheel.defaultPrevented).toBe(false)
+    expect(
+      document
+        .querySelector('[data-slot="drawer-content"]')
+        ?.getAttribute("data-state")
+    ).toBe("open")
   })
 
   it("filters brands case-insensitively", () => {

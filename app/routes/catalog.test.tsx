@@ -404,6 +404,13 @@ describe("brand grouping and filtering", () => {
     expect(chips.every((c) => c.getAttribute("aria-pressed") === "true")).toBe(
       true
     )
+    expect(
+      chips.every(
+        (chip) =>
+          chip.classList.contains("bg-accent") &&
+          chip.classList.contains("text-accent-foreground")
+      )
+    ).toBe(true)
   })
 
   it("deselecting a brand chip hides its section; reselecting restores it", () => {
@@ -419,6 +426,16 @@ describe("brand grouping and filtering", () => {
     expect(
       screen.getByTestId("brand-filter-b-marvel").getAttribute("aria-pressed")
     ).toBe("false")
+    expect(
+      screen
+        .getByTestId("brand-filter-b-marvel")
+        .classList.contains("text-muted-foreground")
+    ).toBe(true)
+    expect(
+      screen
+        .getByTestId("brand-filter-b-marvel")
+        .classList.contains("text-accent-foreground")
+    ).toBe(false)
 
     fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
 
