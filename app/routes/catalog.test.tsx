@@ -2,11 +2,16 @@
 import "fake-indexeddb/auto"
 
 import { createRoutesStub } from "react-router"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
-import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import { fromJSON, store, toJSON } from "~/lib/store"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import FigureCatalog from "~/routes/catalog"
 
 beforeAll(() => {
@@ -30,8 +35,10 @@ afterEach(cleanup)
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
+    dataGeneration: 0,
   })
 })
 
@@ -81,9 +88,15 @@ describe("FigureCatalog route", () => {
   })
 
   it("renders figure cards when store has figures", () => {
-    const figure1 = createFigure({ name: "Naruto", franchise: "Naruto Shippuden" })
-    const figure2 = createFigure({ name: "Goku", franchise: "Dragon Ball Z" })
+    const brand1 = createBrand({ id: "b1", name: "Naruto Shippuden" })
+    const brand2 = createBrand({ id: "b2", name: "Dragon Ball Z" })
+    const figure1 = createFigure({ name: "Naruto", brandId: "b1" })
+    const figure2 = createFigure({ name: "Goku", brandId: "b2" })
     store.setState({
+      brands: new Map([
+        [brand1.id, brand1],
+        [brand2.id, brand2],
+      ]),
       figures: new Map([
         [figure1.id, figure1],
         [figure2.id, figure2],
@@ -137,7 +150,9 @@ describe("FigureCatalog route", () => {
   it("renders enabled Add Figure button in header", () => {
     renderCatalog()
 
-    const addButtons = screen.getAllByText("Add Figure").map((el) => el.closest("button"))
+    const addButtons = screen
+      .getAllByText("Add Figure")
+      .map((el) => el.closest("button"))
     expect(addButtons.every((btn) => btn?.disabled !== true)).toBe(true)
   })
 
@@ -147,21 +162,37 @@ describe("FigureCatalog route", () => {
     const headerButton = screen.getAllByText("Add Figure")[0].closest("button")!
     fireEvent.click(headerButton)
 
-    expect(screen.getByText("Add Figure", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+    expect(
+      screen.getByText("Add Figure", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
   })
 
   it("empty state CTA button opens the form panel", () => {
     renderCatalog()
 
     // The CTA is the second "Add Figure" button (inside the empty state EmptyContent)
-    const addButtons = screen.getAllByText("Add Figure").map((el) => el.closest("button")!)
+    const addButtons = screen
+      .getAllByText("Add Figure")
+      .map((el) => el.closest("button")!)
     fireEvent.click(addButtons[addButtons.length - 1])
 
-    expect(screen.getByText("Add Figure", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+    expect(
+      screen.getByText("Add Figure", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
   })
 
   it("edit button on FigureCard opens form pre-populated with figure data", () => {
-    const figure = createFigure({ name: "Sasuke", franchise: "Naruto", size: 80, notes: "", requiredColors: [] })
+    const figure = createFigure({
+      name: "Sasuke",
+      brandId: null,
+      size: 80,
+      notes: "",
+      requiredColors: [],
+    })
     store.setState({ figures: new Map([[figure.id, figure]]) })
 
     renderCatalog()
@@ -170,7 +201,9 @@ describe("FigureCatalog route", () => {
     fireEvent.click(editButton)
 
     expect(screen.getByText("Edit Figure")).toBeTruthy()
-    const nameInput = screen.getByTestId("figure-name-input") as HTMLInputElement
+    const nameInput = screen.getByTestId(
+      "figure-name-input"
+    ) as HTMLInputElement
     expect(nameInput.value).toBe("Sasuke")
   })
 
@@ -218,7 +251,10 @@ describe("FigureCatalog route", () => {
     const q2 = createQueueItem({ figureId: figure.id })
     store.setState({
       figures: new Map([[figure.id, figure]]),
-      queueItems: new Map([[q1.id, q1], [q2.id, q2]]),
+      queueItems: new Map([
+        [q1.id, q1],
+        [q2.id, q2],
+      ]),
     })
 
     renderCatalog()
@@ -272,5 +308,171 @@ describe("FigureCatalog route", () => {
 
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(store.getState().figures.size).toBe(1)
+  })
+})
+
+describe("brand grouping and filtering", () => {
+  function seedGroupedCatalog() {
+    const pokemon = createBrand({ id: "b-pokemon", name: "Pokemon" })
+    const marvel = createBrand({ id: "b-marvel", name: "Marvel" })
+    const pikachu = createFigure({
+      id: "f-pikachu",
+      name: "Pikachu",
+      brandId: "b-pokemon",
+    })
+    const venom = createFigure({
+      id: "f-venom",
+      name: "Venom",
+      brandId: "b-marvel",
+    })
+    const custom = createFigure({
+      id: "f-custom",
+      name: "Custom Figure",
+      brandId: null,
+    })
+    store.setState({
+      brands: new Map([
+        [pokemon.id, pokemon],
+        [marvel.id, marvel],
+      ]),
+      figures: new Map([
+        [pikachu.id, pikachu],
+        [venom.id, venom],
+        [custom.id, custom],
+      ]),
+    })
+  }
+
+  it('groups figures into sections per brand, alphabetical with "No brand" last', () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    const sections = screen.getAllByTestId("brand-section")
+    expect(sections).toHaveLength(3)
+    const headings = sections.map((s) => s.querySelector("h2")?.textContent)
+    expect(headings).toEqual(["Marvel", "Pokemon", "No brand"])
+    expect(sections[0].textContent).toContain("Venom")
+    expect(sections[1].textContent).toContain("Pikachu")
+    expect(sections[2].textContent).toContain("Custom Figure")
+  })
+
+  it('renders no "No brand" section when every figure has a brand', () => {
+    const pokemon = createBrand({ id: "b-pokemon", name: "Pokemon" })
+    const pikachu = createFigure({
+      id: "f1",
+      name: "Pikachu",
+      brandId: "b-pokemon",
+    })
+    store.setState({
+      brands: new Map([[pokemon.id, pokemon]]),
+      figures: new Map([[pikachu.id, pikachu]]),
+    })
+    renderCatalog()
+
+    const headings = screen
+      .getAllByTestId("brand-section")
+      .map((s) => s.querySelector("h2")?.textContent)
+    expect(headings).toEqual(["Pokemon"])
+  })
+
+  it('groups figures with an unresolvable brandId under "No brand" (orphan tolerance)', () => {
+    const orphan = createFigure({
+      id: "f1",
+      name: "Orphan",
+      brandId: "missing",
+    })
+    store.setState({ figures: new Map([[orphan.id, orphan]]) })
+    renderCatalog()
+
+    const sections = screen.getAllByTestId("brand-section")
+    expect(sections).toHaveLength(1)
+    expect(sections[0].querySelector("h2")?.textContent).toBe("No brand")
+    expect(sections[0].textContent).toContain("Orphan")
+  })
+
+  it("renders a filter chip per group, all selected by default", () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    const filter = screen.getByTestId("brand-filter")
+    const chips = Array.from(filter.querySelectorAll("button"))
+    expect(chips.map((c) => c.textContent)).toEqual([
+      "Marvel",
+      "Pokemon",
+      "No brand",
+    ])
+    expect(chips.every((c) => c.getAttribute("aria-pressed") === "true")).toBe(
+      true
+    )
+  })
+
+  it("deselecting a brand chip hides its section; reselecting restores it", () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
+
+    let headings = screen
+      .getAllByTestId("brand-section")
+      .map((s) => s.querySelector("h2")?.textContent)
+    expect(headings).toEqual(["Pokemon", "No brand"])
+    expect(
+      screen.getByTestId("brand-filter-b-marvel").getAttribute("aria-pressed")
+    ).toBe("false")
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
+
+    headings = screen
+      .getAllByTestId("brand-section")
+      .map((s) => s.querySelector("h2")?.textContent)
+    expect(headings).toEqual(["Marvel", "Pokemon", "No brand"])
+  })
+
+  it('the "No brand" group is filterable like any brand', () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-no-brand"))
+
+    const headings = screen
+      .getAllByTestId("brand-section")
+      .map((s) => s.querySelector("h2")?.textContent)
+    expect(headings).toEqual(["Marvel", "Pokemon"])
+    expect(screen.queryByText("Custom Figure")).toBeNull()
+  })
+
+  it('deselecting every group shows an empty state with a one-action "Show all" reset', () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
+    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
+    fireEvent.click(screen.getByTestId("brand-filter-no-brand"))
+
+    expect(screen.queryAllByTestId("brand-section")).toHaveLength(0)
+    expect(screen.getByText("All brands hidden")).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }))
+
+    expect(screen.getAllByTestId("brand-section")).toHaveLength(3)
+  })
+
+  it("an import (full data replace) resets the filter to all-visible", () => {
+    seedGroupedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
+    expect(screen.queryByText("Venom")).toBeNull()
+
+    // Import replaces all data via fromJSON, which bumps dataGeneration
+    const snapshot = toJSON()
+    act(() => {
+      fromJSON(snapshot)
+    })
+
+    expect(screen.getByText("Venom")).toBeTruthy()
+    expect(
+      screen.getByTestId("brand-filter-b-marvel").getAttribute("aria-pressed")
+    ).toBe("true")
   })
 })

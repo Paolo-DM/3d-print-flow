@@ -23,6 +23,7 @@ export default function FigureView() {
   const completingRef = useRef(new Map<string, CompletionPhase>())
 
   const spools = usePrintFlowStore((s) => s.spools)
+  const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const navigate = useNavigate()
@@ -157,7 +158,7 @@ export default function FigureView() {
   }
 
   return (
-    <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid animate-fade-in-up grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {visibleItems.map((qi) => {
         const figure = figures.get(qi.figureId)
         if (!figure) return null
@@ -167,6 +168,7 @@ export default function FigureView() {
             key={qi.id}
             queueItem={qi}
             figure={figure}
+            brands={brands}
             spools={spools}
             completionPhase={phase}
             onCompletionPhaseEnd={(completedPhase) => {

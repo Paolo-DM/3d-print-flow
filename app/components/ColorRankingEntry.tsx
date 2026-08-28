@@ -8,7 +8,7 @@ import {
   type ColorRankingEntry as ColorRankingEntryType,
 } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
-import type { Figure, QueueItem, Spool } from "~/lib/types"
+import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Badge } from "~/components/ui/badge"
 import {
@@ -25,6 +25,7 @@ interface ColorRankingEntryProps {
   entry: ColorRankingEntryType
   rank: number
   figures: Map<string, Figure>
+  brands: Map<string, Brand>
   queueItems: Map<string, QueueItem>
   spools: Map<string, Spool>
   currentSpoolId: string
@@ -41,6 +42,7 @@ export function ColorRankingEntry({
   entry,
   rank,
   figures,
+  brands,
   queueItems,
   spools,
   currentSpoolId,
@@ -134,13 +136,9 @@ export function ColorRankingEntry({
           <span className="min-w-0 flex-1">
             <span className="text-base font-semibold">{entry.spool.name}</span>
           </span>
-          <span className="text-xs text-muted-foreground">
-            figures
-          </span>
+          <span className="text-xs text-muted-foreground">figures</span>
           {entry.hasOrders ? (
-            <Badge className="bg-order-muted text-order">
-              Order
-            </Badge>
+            <Badge className="bg-order-muted text-order">Order</Badge>
           ) : null}
           <span className="min-w-[2ch] text-right text-3xl font-extrabold tabular-nums">
             {entry.count}
@@ -158,6 +156,10 @@ export function ColorRankingEntry({
           {matchingItems.map((qi, index) => {
             const figure = figures.get(qi.figureId)
             if (!figure) return null
+            const brandName =
+              figure.brandId !== null
+                ? brands.get(figure.brandId)?.name
+                : undefined
             const progress = computeFigureProgress(qi, figure)
             const percentage =
               progress.total > 0
@@ -167,7 +169,10 @@ export function ColorRankingEntry({
             return (
               <div key={qi.id}>
                 {index === orderEndIndex && hasOrderStockBoundary && (
-                  <Separator className="my-3" data-testid="order-stock-separator" />
+                  <Separator
+                    className="my-3"
+                    data-testid="order-stock-separator"
+                  />
                 )}
                 <div
                   className={cn(
@@ -193,18 +198,17 @@ export function ColorRankingEntry({
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{figure.name}</p>
-                      {figure.franchise ? (
+                      <p className="truncate text-sm font-medium">
+                        {figure.name}
+                      </p>
+                      {brandName ? (
                         <p className="truncate text-xs text-muted-foreground">
-                          {figure.franchise}
+                          {brandName}
                         </p>
                       ) : null}
                     </div>
                     {qi.type === "order" ? (
-                      <Badge
-                        variant="outline"
-                        className="text-order"
-                      >
+                      <Badge variant="outline" className="text-order">
                         Order
                       </Badge>
                     ) : (

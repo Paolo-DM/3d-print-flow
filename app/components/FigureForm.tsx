@@ -5,6 +5,7 @@ import { computeAffectedQueueItems } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Figure } from "~/lib/types"
 import { cn } from "~/lib/utils"
+import { BrandCombobox, type BrandSelection } from "~/components/BrandCombobox"
 import { Button } from "~/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
@@ -17,19 +18,26 @@ interface FigureFormProps {
 }
 
 export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
+  const spools = usePrintFlowStore((s) => s.spools)
+  const brands = usePrintFlowStore((s) => s.brands)
+  const queueItems = usePrintFlowStore((s) => s.queueItems)
+  const createFigure = usePrintFlowStore((s) => s.createFigure)
+  const updateFigure = usePrintFlowStore((s) => s.updateFigure)
+  const createBrand = usePrintFlowStore((s) => s.createBrand)
+
   const [name, setName] = useState(figure?.name ?? "")
-  const [franchise, setFranchise] = useState(figure?.franchise ?? "")
+  // An unresolvable brandId renders as brandless; saving then writes null.
+  const [brandSelection, setBrandSelection] = useState<BrandSelection>(() =>
+    figure?.brandId != null && brands.has(figure.brandId)
+      ? { kind: "existing", brandId: figure.brandId }
+      : { kind: "none" }
+  )
   const [size, setSize] = useState(figure?.size ?? 60)
   const [notes, setNotes] = useState(figure?.notes ?? "")
   const [selectedColors, setSelectedColors] = useState<string[]>(
     figure?.requiredColors ?? []
   )
   const [saved, setSaved] = useState(false)
-
-  const spools = usePrintFlowStore((s) => s.spools)
-  const queueItems = usePrintFlowStore((s) => s.queueItems)
-  const createFigure = usePrintFlowStore((s) => s.createFigure)
-  const updateFigure = usePrintFlowStore((s) => s.updateFigure)
 
   const spoolList = Array.from(spools.values())
   const affectedQueueItems = figure
@@ -49,9 +57,16 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
     if (!canSave) return
     setSaved(true)
     const clampedSize = Math.round(Math.max(1, Math.min(999, size || 60)))
+    // Staged inline creation: a "new" brand is committed only now, at save.
+    const brandId =
+      brandSelection.kind === "existing"
+        ? brandSelection.brandId
+        : brandSelection.kind === "new"
+          ? createBrand(brandSelection.name)
+          : null
     const data = {
       name: name.trim(),
-      franchise: franchise.trim(),
+      brandId,
       size: clampedSize,
       notes,
       requiredColors: selectedColors.filter((id) => spools.has(id)),
@@ -88,13 +103,12 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="figure-franchise">Franchise</FieldLabel>
-            <Input
-              id="figure-franchise"
-              value={franchise}
-              onChange={(e) => setFranchise(e.target.value)}
-              placeholder="e.g. Naruto Shippuden"
-              data-testid="figure-franchise-input"
+            <FieldLabel htmlFor="figure-brand">Brand</FieldLabel>
+            <BrandCombobox
+              id="figure-brand"
+              brands={brands}
+              value={brandSelection}
+              onChange={setBrandSelection}
             />
           </Field>
           <Field>

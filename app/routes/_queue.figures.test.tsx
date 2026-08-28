@@ -5,7 +5,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
 import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import QueueLayout from "~/routes/_queue"
 import FigureView from "~/routes/_queue.figures"
 
@@ -33,6 +38,7 @@ afterEach(cleanup)
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
   })
@@ -119,15 +125,17 @@ describe("FigureView route", () => {
 
   it("renders QueueItemCards when queue items exist", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const brand = createBrand({ id: "b1", name: "Shippuden" })
     const figure = createFigure({
       id: "f1",
       name: "Naruto",
-      franchise: "Shippuden",
+      brandId: "b1",
       requiredColors: ["s1"],
     })
     const qi = createQueueItem({ figureId: "f1", completedColors: [] })
     store.setState({
       spools: new Map([["s1", spool]]),
+      brands: new Map([["b1", brand]]),
       figures: new Map([["f1", figure]]),
       queueItems: new Map([[qi.id, qi]]),
     })
@@ -194,7 +202,6 @@ describe("FigureView route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s1"],
     })
     const qi = createQueueItem({
@@ -224,7 +231,6 @@ describe("FigureView route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s1"],
     })
     const qi = createQueueItem({
@@ -256,7 +262,6 @@ describe("FigureView route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s1", "s2"],
     })
     const qi = createQueueItem({

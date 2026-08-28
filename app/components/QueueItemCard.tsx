@@ -2,7 +2,7 @@ import { Trash2 } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
 import { computeFigureProgress } from "~/lib/derived"
-import type { Figure, QueueItem, Spool } from "~/lib/types"
+import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import {
   AlertDialog,
@@ -25,6 +25,7 @@ export type CompletionPhase = "pulsing" | "collapsing"
 interface QueueItemCardProps {
   queueItem: QueueItem
   figure: Figure
+  brands: Map<string, Brand>
   spools: Map<string, Spool>
   completionPhase?: CompletionPhase
   onCompletionPhaseEnd?: (phase: CompletionPhase) => void
@@ -33,6 +34,7 @@ interface QueueItemCardProps {
 export function QueueItemCard({
   queueItem,
   figure,
+  brands,
   spools,
   completionPhase,
   onCompletionPhaseEnd,
@@ -40,6 +42,8 @@ export function QueueItemCard({
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
   const removeFromQueue = usePrintFlowStore((s) => s.removeFromQueue)
   const progress = computeFigureProgress(queueItem, figure)
+  const brandName =
+    figure.brandId !== null ? brands.get(figure.brandId)?.name : undefined
   const missingSpoolCount = figure.requiredColors.filter(
     (spoolId) => !spools.has(spoolId)
   ).length
@@ -54,7 +58,7 @@ export function QueueItemCard({
         "flex flex-col gap-2 rounded-lg border p-3 shadow-sm transition-shadow duration-200 hover:shadow",
         completionPhase === "pulsing" && "animate-completion-pulse",
         completionPhase === "collapsing" &&
-          "animate-completion-collapse overflow-hidden",
+          "animate-completion-collapse overflow-hidden"
       )}
       data-testid="queue-item-card"
       onAnimationEnd={
@@ -66,16 +70,15 @@ export function QueueItemCard({
       <div className="flex items-baseline justify-between gap-2">
         <div>
           <p className="truncate text-sm font-medium">{figure.name}</p>
-          {figure.franchise ? (
-            <p className="truncate text-xs text-muted-foreground">{figure.franchise}</p>
+          {brandName ? (
+            <p className="truncate text-xs text-muted-foreground">
+              {brandName}
+            </p>
           ) : null}
         </div>
         <div className="flex items-center gap-1">
           {queueItem.type === "order" ? (
-            <Badge
-              variant="outline"
-              className="text-order"
-            >
+            <Badge variant="outline" className="text-order">
               Order
             </Badge>
           ) : (

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { Suspense } from "react"
 import {
   afterEach,
@@ -14,7 +14,12 @@ import {
 } from "vitest"
 
 import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import { FigureForm } from "~/components/FigureForm"
 
 beforeAll(() => {
@@ -38,6 +43,7 @@ afterEach(cleanup)
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
   })
@@ -68,7 +74,9 @@ describe("FigureForm", () => {
     renderForm()
 
     expect(screen.getByTestId("figure-name-input")).toBeTruthy()
-    expect(screen.getByTestId("figure-franchise-input")).toBeTruthy()
+    expect(screen.getByTestId("brand-combobox-trigger")).toBeTruthy()
+    // The Brand FieldLabel points at the combobox trigger
+    expect(screen.getByTestId("brand-combobox-trigger").id).toBe("figure-brand")
     expect(screen.getByTestId("figure-size-input")).toBeTruthy()
     expect(screen.getByTestId("figure-notes-input")).toBeTruthy()
   })
@@ -161,7 +169,11 @@ describe("FigureForm", () => {
 
   it("calls createFigure on save with correct data for new figure", () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
-    store.setState({ spools: new Map([[spool.id, spool]]) })
+    const brand = createBrand({ id: "b1", name: "Naruto Shippuden" })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      brands: new Map([[brand.id, brand]]),
+    })
 
     const onSave = vi.fn()
     renderForm({ onSave })
@@ -169,9 +181,8 @@ describe("FigureForm", () => {
     fireEvent.change(screen.getByTestId("figure-name-input"), {
       target: { value: "  Naruto  " },
     })
-    fireEvent.change(screen.getByTestId("figure-franchise-input"), {
-      target: { value: "Naruto Shippuden" },
-    })
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.click(screen.getByTestId("brand-option-b1"))
     fireEvent.change(screen.getByTestId("figure-size-input"), {
       target: { value: "80" },
     })
@@ -186,10 +197,107 @@ describe("FigureForm", () => {
     const figures = Array.from(store.getState().figures.values())
     expect(figures).toHaveLength(1)
     expect(figures[0].name).toBe("Naruto")
-    expect(figures[0].franchise).toBe("Naruto Shippuden")
+    expect(figures[0].brandId).toBe("b1")
     expect(figures[0].size).toBe(80)
     expect(figures[0].notes).toBe("test note")
     expect(figures[0].requiredColors).toEqual([spool.id])
+  })
+
+  it("saves brandId null when no brand is selected", () => {
+    renderForm()
+
+    fireEvent.change(screen.getByTestId("figure-name-input"), {
+      target: { value: "Goku" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    const figures = Array.from(store.getState().figures.values())
+    expect(figures[0].brandId).toBeNull()
+  })
+
+  it("staged inline create: brand is only committed when the figure saves", () => {
+    renderForm()
+
+    fireEvent.change(screen.getByTestId("figure-name-input"), {
+      target: { value: "Totoro" },
+    })
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.change(screen.getByTestId("brand-combobox-input"), {
+      target: { value: "Ghibli" },
+    })
+    fireEvent.click(screen.getByTestId("brand-create-option"))
+
+    // Staged: nothing persisted yet
+    expect(store.getState().brands.size).toBe(0)
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    const brands = Array.from(store.getState().brands.values())
+    expect(brands).toHaveLength(1)
+    expect(brands[0].name).toBe("Ghibli")
+    const figures = Array.from(store.getState().figures.values())
+    expect(figures[0].brandId).toBe(brands[0].id)
+  })
+
+  it("staged inline create: cancelling the form persists neither brand nor figure", () => {
+    const onCancel = vi.fn()
+    renderForm({ onCancel })
+
+    fireEvent.change(screen.getByTestId("figure-name-input"), {
+      target: { value: "Totoro" },
+    })
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.change(screen.getByTestId("brand-combobox-input"), {
+      target: { value: "Ghibli" },
+    })
+    fireEvent.click(screen.getByTestId("brand-create-option"))
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(store.getState().brands.size).toBe(0)
+    expect(store.getState().figures.size).toBe(0)
+  })
+
+  it("saving a staged brand whose name now exists (any casing) links the existing brand without duplicating", () => {
+    renderForm()
+
+    fireEvent.change(screen.getByTestId("figure-name-input"), {
+      target: { value: "Kakashi" },
+    })
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.change(screen.getByTestId("brand-combobox-input"), {
+      target: { value: "Naruto" },
+    })
+    fireEvent.click(screen.getByTestId("brand-create-option"))
+
+    // Between staging and saving, the same brand gets created elsewhere
+    // with different casing.
+    let existingId: string | null = null
+    act(() => {
+      existingId = store.getState().createBrand("naruto")
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(store.getState().brands.size).toBe(1)
+    const figures = Array.from(store.getState().figures.values())
+    expect(figures[0].brandId).toBe(existingId)
+  })
+
+  it("typing an existing brand name in any casing offers no create row (dedup)", () => {
+    const brand = createBrand({ id: "b1", name: "Naruto" })
+    store.setState({ brands: new Map([[brand.id, brand]]) })
+
+    renderForm()
+
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.change(screen.getByTestId("brand-combobox-input"), {
+      target: { value: "  NARUTO " },
+    })
+
+    expect(screen.queryByTestId("brand-create-option")).toBeNull()
+    expect(screen.getByTestId("brand-option-b1")).toBeTruthy()
   })
 
   it("can save a figure with zero colors selected", () => {
@@ -210,11 +318,15 @@ describe("FigureForm", () => {
 
   it("pre-populates all fields in edit mode", () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
-    store.setState({ spools: new Map([[spool.id, spool]]) })
+    const brand = createBrand({ id: "b1", name: "Naruto Shippuden" })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      brands: new Map([[brand.id, brand]]),
+    })
 
     const figure = createFigure({
       name: "Naruto",
-      franchise: "Naruto Shippuden",
+      brandId: "b1",
       size: 75,
       notes: "my note",
       requiredColors: ["s1"],
@@ -225,9 +337,9 @@ describe("FigureForm", () => {
     expect(
       (screen.getByTestId("figure-name-input") as HTMLInputElement).value
     ).toBe("Naruto")
-    expect(
-      (screen.getByTestId("figure-franchise-input") as HTMLInputElement).value
-    ).toBe("Naruto Shippuden")
+    expect(screen.getByTestId("brand-combobox-trigger").textContent).toContain(
+      "Naruto Shippuden"
+    )
     expect(
       (screen.getByTestId("figure-size-input") as HTMLInputElement).value
     ).toBe("75")
@@ -236,6 +348,27 @@ describe("FigureForm", () => {
     ).toBe("my note")
     const toggle = screen.getByTestId(`spool-toggle-${spool.id}`)
     expect(toggle.getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("shows no brand for an unresolvable brandId and saves null (orphan tolerance)", () => {
+    const figure = createFigure({
+      id: "fig-1",
+      name: "Naruto",
+      brandId: "missing-brand",
+    })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    const onSave = vi.fn()
+    renderForm({ figure, onSave })
+
+    expect(screen.getByTestId("brand-combobox-trigger").textContent).toContain(
+      "No brand"
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(onSave).toHaveBeenCalledOnce()
+    expect(store.getState().figures.get("fig-1")?.brandId).toBeNull()
   })
 
   it("shows the affected queue item warning in edit mode", () => {
@@ -305,7 +438,7 @@ describe("FigureForm", () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({
       name: "OldName",
-      franchise: "OldFranchise",
+      brandId: null,
       size: 60,
       notes: "",
       requiredColors: [],

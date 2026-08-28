@@ -37,6 +37,7 @@ afterEach(cleanup)
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
   })
@@ -327,7 +328,6 @@ describe("ColorView route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s1"],
     })
     const qi = createQueueItem({

@@ -34,7 +34,7 @@ import {
 function CompletedArchiveItem({
   queueItemId,
   figureName,
-  franchise,
+  brandName,
   requiredColors,
   completedAt,
   spools,
@@ -43,7 +43,7 @@ function CompletedArchiveItem({
 }: {
   queueItemId: string
   figureName: string
-  franchise: string | null | undefined
+  brandName: string | null
   requiredColors: string[]
   completedAt: string | null
   spools: Map<string, Spool>
@@ -63,8 +63,8 @@ function CompletedArchiveItem({
           >
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">{figureName}</p>
-              {franchise ? (
-                <p className="text-xs text-muted-foreground">{franchise}</p>
+              {brandName ? (
+                <p className="text-xs text-muted-foreground">{brandName}</p>
               ) : null}
               {completedAt ? (
                 <p className="mt-1 text-xs text-muted-foreground tabular-nums">
@@ -121,7 +121,9 @@ function CompletedArchiveItem({
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete completed figure?</AlertDialogTitle>
+                    <AlertDialogTitle>
+                      Delete completed figure?
+                    </AlertDialogTitle>
                     <AlertDialogDescription>
                       This will permanently remove &ldquo;{figureName}&rdquo;
                       from your completed history.
@@ -148,6 +150,7 @@ function CompletedArchiveItem({
 
 export default function Completed() {
   const spools = usePrintFlowStore((s) => s.spools)
+  const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const requeueCompleted = usePrintFlowStore((s) => s.requeueCompleted)
@@ -190,7 +193,11 @@ export default function Completed() {
                 key={qi.id}
                 queueItemId={qi.id}
                 figureName={figure.name}
-                franchise={figure.franchise}
+                brandName={
+                  figure.brandId !== null
+                    ? (brands.get(figure.brandId)?.name ?? null)
+                    : null
+                }
                 requiredColors={figure.requiredColors}
                 completedAt={qi.completedAt}
                 spools={spools}

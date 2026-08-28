@@ -4,12 +4,18 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import { QueueItemCard } from "~/components/QueueItemCard"
 
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
   })
@@ -35,12 +41,15 @@ const spools = new Map([
   [blueSpool.id, blueSpool],
 ])
 
+const shippuden = createBrand({ id: "b1", name: "Shippuden" })
+const brands = new Map([[shippuden.id, shippuden]])
+
 describe("QueueItemCard", () => {
-  it("renders figure name and franchise", () => {
+  it("renders figure name and brand name", () => {
     const figure = createFigure({
       id: "f1",
       name: "Naruto",
-      franchise: "Shippuden",
+      brandId: "b1",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -49,7 +58,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(screen.getByText("Naruto")).toBeTruthy()
     expect(screen.getByText("Shippuden")).toBeTruthy()
@@ -64,7 +80,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(screen.getByText("Order")).toBeTruthy()
   })
@@ -78,7 +101,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(screen.getByText("Stock")).toBeTruthy()
   })
@@ -94,7 +124,14 @@ describe("QueueItemCard", () => {
       completedColors: ["s-red"],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(screen.getAllByRole("switch")).toHaveLength(3)
     expect(screen.getByLabelText("Mark White PLA as printed")).toBeTruthy()
@@ -113,7 +150,14 @@ describe("QueueItemCard", () => {
       completedColors: ["s-red"],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(screen.getByText("1/3")).toBeTruthy()
   })
@@ -126,7 +170,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     const fraction = screen.getByText("0/1")
     expect(fraction.className).toContain("tabular-nums")
@@ -151,7 +202,14 @@ describe("QueueItemCard", () => {
       toggleChip,
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     fireEvent.click(screen.getByLabelText("Mark White PLA as printed"))
 
@@ -169,7 +227,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     expect(
       screen.getByText("Missing 1 spool reference for this figure.")
@@ -190,9 +255,10 @@ describe("QueueItemCard", () => {
       <QueueItemCard
         queueItem={qi}
         figure={figure}
+        brands={brands}
         spools={spools}
         completionPhase="pulsing"
-      />,
+      />
     )
 
     const card = screen.getByTestId("queue-item-card")
@@ -211,9 +277,10 @@ describe("QueueItemCard", () => {
       <QueueItemCard
         queueItem={qi}
         figure={figure}
+        brands={brands}
         spools={spools}
         completionPhase="collapsing"
-      />,
+      />
     )
 
     const card = screen.getByTestId("queue-item-card")
@@ -224,7 +291,6 @@ describe("QueueItemCard", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -234,7 +300,12 @@ describe("QueueItemCard", () => {
     })
 
     render(
-      <QueueItemCard queueItem={qi} figure={figure} spools={spools} />,
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
     )
 
     const card = screen.getByTestId("queue-item-card")
@@ -245,7 +316,6 @@ describe("QueueItemCard", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -254,7 +324,14 @@ describe("QueueItemCard", () => {
       completedColors: [],
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     fireEvent.click(screen.getByLabelText("Remove Goku"))
     await screen.findByRole("alertdialog")
@@ -269,7 +346,6 @@ describe("QueueItemCard", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -285,7 +361,14 @@ describe("QueueItemCard", () => {
       removeFromQueue,
     })
 
-    render(<QueueItemCard queueItem={qi} figure={figure} spools={spools} />)
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
 
     fireEvent.click(screen.getByLabelText("Remove Goku"))
     await screen.findByRole("alertdialog")

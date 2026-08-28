@@ -3,7 +3,7 @@ import { ListPlus, Pencil, Trash2 } from "lucide-react"
 
 import { getPerceivedLightness } from "~/lib/color-utils"
 import { store } from "~/lib/store"
-import type { Figure, Spool } from "~/lib/types"
+import type { Brand, Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardHeader } from "~/components/ui/card"
@@ -16,22 +16,36 @@ import {
 
 interface FigureCardProps {
   figure: Figure
+  brands: Map<string, Brand>
   spools: Map<string, Spool>
   onEdit?: (figure: Figure) => void
   onDelete?: (figure: Figure) => void
 }
 
-export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps) {
+export function FigureCard({
+  figure,
+  brands,
+  spools,
+  onEdit,
+  onDelete,
+}: FigureCardProps) {
   const [added, setAdded] = useState(false)
   const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => () => {
-    if (addedTimer.current) clearTimeout(addedTimer.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (addedTimer.current) clearTimeout(addedTimer.current)
+    },
+    []
+  )
 
   const resolvedSpools = figure.requiredColors
     .map((id) => spools.get(id))
     .filter((s): s is Spool => s !== undefined)
+
+  // Unresolvable brandId renders as brandless (Map.get → undefined)
+  const brandName =
+    figure.brandId !== null ? brands.get(figure.brandId)?.name : undefined
 
   function handleAddToQueue(type: "stock" | "order") {
     store.getState().addToQueue(figure.id, type)
@@ -41,13 +55,18 @@ export function FigureCard({ figure, spools, onEdit, onDelete }: FigureCardProps
   }
 
   return (
-    <Card data-testid="figure-card" className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <Card
+      data-testid="figure-card"
+      className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+    >
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex flex-col gap-1">
             <p className="truncate text-lg font-bold">{figure.name}</p>
-            {figure.franchise ? (
-              <p className="truncate text-sm text-muted-foreground">{figure.franchise}</p>
+            {brandName ? (
+              <p className="truncate text-sm text-muted-foreground">
+                {brandName}
+              </p>
             ) : null}
             <p className="text-sm text-muted-foreground">{figure.size}%</p>
           </div>

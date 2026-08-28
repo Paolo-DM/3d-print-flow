@@ -13,7 +13,12 @@ import {
 } from "vitest"
 
 import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import Completed from "~/routes/completed"
 
 beforeAll(() => {
@@ -37,6 +42,7 @@ afterEach(cleanup)
 beforeEach(() => {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
   })
@@ -81,11 +87,12 @@ describe("Completed route", () => {
     expect(screen.getByText("No completed figures yet")).toBeTruthy()
   })
 
-  it("renders completed items with figure name and franchise", () => {
+  it("renders completed items with figure name and brand name", () => {
+    const brand = createBrand({ id: "b1", name: "Shippuden" })
     const figure = createFigure({
       id: "f1",
       name: "Naruto",
-      franchise: "Shippuden",
+      brandId: "b1",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -96,6 +103,7 @@ describe("Completed route", () => {
     })
     store.setState({
       spools,
+      brands: new Map([["b1", brand]]),
       figures: new Map([["f1", figure]]),
       queueItems: new Map([["q1", qi]]),
     })
@@ -181,7 +189,6 @@ describe("Completed route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({
@@ -210,7 +217,6 @@ describe("Completed route", () => {
     const figure = createFigure({
       id: "f1",
       name: "Goku",
-      franchise: "DBZ",
       requiredColors: ["s-white"],
     })
     const qi = createQueueItem({

@@ -4,10 +4,15 @@ export interface Spool {
   hex: string
 }
 
+export interface Brand {
+  id: string
+  name: string
+}
+
 export interface Figure {
   id: string
   name: string
-  franchise: string
+  brandId: string | null
   size: number
   notes: string
   requiredColors: string[]

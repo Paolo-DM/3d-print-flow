@@ -3,7 +3,8 @@ import { toast } from "sonner"
 
 import { writeStore } from "~/lib/db"
 import { computeCompletionStatus } from "~/lib/derived"
-import type { Figure, QueueItem, Spool } from "~/lib/types"
+import { brandKey } from "~/lib/migration"
+import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 
 // Module-level flag — NOT in store state (avoids re-renders)
 let _persist = true
@@ -18,9 +19,18 @@ export function getPersist() {
 
 interface PrintFlowState {
   spools: Map<string, Spool>
+  brands: Map<string, Brand>
   figures: Map<string, Figure>
   queueItems: Map<string, QueueItem>
+  /** Incremented on every full data replace (init, import, rollback) — lets UI key-reset ephemeral state. Not persisted. */
+  dataGeneration: number
   createSpool: (data: Omit<Spool, "id">) => void
+  /**
+   * Create-or-match a brand by name (trim; case-insensitive dedup; first-seen
+   * casing wins). Returns the matched-or-minted brand id, or null when the
+   * name is empty after trimming.
+   */
+  createBrand: (name: string) => string | null
   updateSpool: (id: string, updates: Partial<Omit<Spool, "id">>) => void
   deleteSpool: (id: string) => void
   createFigure: (data: Omit<Figure, "id">) => void
@@ -32,10 +42,12 @@ interface PrintFlowState {
   requeueCompleted: (queueItemId: string) => void
 }
 
-export const store = createStore<PrintFlowState>((set) => ({
+export const store = createStore<PrintFlowState>((set, get) => ({
   spools: new Map(),
+  brands: new Map(),
   figures: new Map(),
   queueItems: new Map(),
+  dataGeneration: 0,
 
   createSpool(data) {
     set((state) => {
@@ -44,6 +56,22 @@ export const store = createStore<PrintFlowState>((set) => ({
       next.set(id, { id, ...data })
       return { spools: next }
     })
+  },
+
+  createBrand(name) {
+    const trimmed = name.trim()
+    if (trimmed.length === 0) return null
+    const key = brandKey(trimmed)
+    for (const brand of get().brands.values()) {
+      if (brandKey(brand.name) === key) return brand.id
+    }
+    const id = crypto.randomUUID()
+    set((state) => {
+      const next = new Map(state.brands)
+      next.set(id, { id, name: trimmed })
+      return { brands: next }
+    })
+    return id
   },
 
   updateSpool(id, updates) {
@@ -179,9 +207,10 @@ function showPersistenceError() {
 }
 
 function retryPersistence() {
-  const { spools, figures, queueItems } = store.getState()
+  const { spools, brands, figures, queueItems } = store.getState()
   Promise.all([
     writeStore("spools", spools),
+    writeStore("brands", brands),
     writeStore("figures", figures),
     writeStore("queueItems", queueItems),
   ]).then(() => toast.dismiss("persistence-failure"), showPersistenceError)
@@ -192,6 +221,8 @@ store.subscribe((state, prevState) => {
   if (!_persist) return
   if (state.spools !== prevState.spools)
     writeStore("spools", state.spools).catch(showPersistenceError)
+  if (state.brands !== prevState.brands)
+    writeStore("brands", state.brands).catch(showPersistenceError)
   if (state.figures !== prevState.figures)
     writeStore("figures", state.figures).catch(showPersistenceError)
   if (state.queueItems !== prevState.queueItems)
@@ -203,6 +234,7 @@ export function toJSON() {
   const state = store.getState()
   return {
     spools: Object.fromEntries(state.spools),
+    brands: Object.fromEntries(state.brands),
     figures: Object.fromEntries(state.figures),
     queueItems: Object.fromEntries(state.queueItems),
   }
@@ -210,6 +242,7 @@ export function toJSON() {
 
 export function fromJSON(data: {
   spools: Record<string, Spool>
+  brands: Record<string, Brand>
   figures: Record<string, Figure>
   queueItems: Record<string, QueueItem>
 }) {
@@ -225,8 +258,10 @@ export function fromJSON(data: {
 
   store.setState({
     spools: new Map(Object.entries(data.spools)),
+    brands: new Map(Object.entries(data.brands)),
     figures: new Map(Object.entries(data.figures)),
     queueItems,
+    dataGeneration: store.getState().dataGeneration + 1,
   })
 }
 

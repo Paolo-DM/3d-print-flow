@@ -48,3 +48,13 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-spool-sort-and-theme-toggle-perf.md`
   summary: Pre-existing test failure in app/routes/completed.test.tsx ("shows completion date", regex /Completed\s+Mar/) — date formatting appears locale/environment dependent.
   evidence: Fails on clean baseline f47c7ae with this spec's changes stashed (verified 2026-08-28), so unrelated to this story; 1 failed / 276 passed on main.
+
+## Deferred from: Codex review of spec-brand (2026-08-28)
+
+- **Stale open edit form can overwrite freshly imported data** — `importData()` replaces store maps without navigation while `catalog.tsx` retains a captured `editingFigure` snapshot; saving a form opened before an import overwrites (or silently no-ops on) the imported figure. Pre-existing today with `franchise`, brand-independent — not addressed by the brand spec. Revisit if imports become frequent or multi-tab sync is added.
+
+## Deferred from: code review of spec-brand (2026-08-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-brand.md`
+  summary: Figures inside catalog brand sections render in Map insertion order; consider alphabetical sorting within each section to match the spool-library precedent (commit 30e1bfb).
+  evidence: Brand sections, filter chips, and the combobox all sort alphabetically, making the unsorted intra-section figure order visibly inconsistent; the flat grid had the same insertion order pre-change, so this is pre-existing ordering behavior surfaced by grouping.

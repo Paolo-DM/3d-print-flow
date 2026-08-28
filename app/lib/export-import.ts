@@ -1,17 +1,35 @@
 import { startTransition } from "react"
 
 import { replaceAll } from "~/lib/db"
+import {
+  isRecord,
+  isValidFigureV1,
+  migrateV1Figures,
+  type FigureV1,
+} from "~/lib/migration"
 import { fromJSON, setPersist, toJSON } from "~/lib/store"
+import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 
 export interface ExportEnvelope {
-  version: number
+  version: 2
   exportedAt: string
   data: ReturnType<typeof toJSON>
 }
 
+/** Legacy v1 envelope — accepted as import input only, never exported. */
+export interface ExportEnvelopeV1 {
+  version: 1
+  exportedAt: string
+  data: {
+    spools: Record<string, Spool>
+    figures: Record<string, FigureV1>
+    queueItems: Record<string, QueueItem>
+  }
+}
+
 export function buildExportData(): ExportEnvelope {
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     data: toJSON(),
   }
@@ -42,10 +60,6 @@ export function exportData() {
   triggerDownload(json, filename)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
 function isValidSpool(value: unknown): boolean {
   if (!isRecord(value)) return false
   return (
@@ -55,12 +69,17 @@ function isValidSpool(value: unknown): boolean {
   )
 }
 
+function isValidBrand(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return typeof value.id === "string" && typeof value.name === "string"
+}
+
 function isValidFigure(value: unknown): boolean {
   if (!isRecord(value)) return false
   return (
     typeof value.id === "string" &&
     typeof value.name === "string" &&
-    typeof value.franchise === "string" &&
+    (typeof value.brandId === "string" || value.brandId === null) &&
     typeof value.size === "number" &&
     typeof value.notes === "string" &&
     Array.isArray(value.requiredColors) &&
@@ -90,23 +109,66 @@ function allValuesMatch(
   return Object.values(record).every(validator)
 }
 
-export function validateExportEnvelope(
-  data: unknown
-): data is ExportEnvelope {
+function validateEnvelopeShell(data: unknown): data is {
+  version: number
+  exportedAt: string
+  data: Record<string, unknown>
+} {
   if (!isRecord(data)) return false
   if (typeof data.version !== "number") return false
   if (typeof data.exportedAt !== "string") return false
-  if (!isRecord(data.data)) return false
+  return isRecord(data.data)
+}
+
+export function validateV1Envelope(data: unknown): data is ExportEnvelopeV1 {
+  if (!validateEnvelopeShell(data)) return false
+  if (data.version !== 1) return false
 
   const d = data.data
-  if (!isRecord(d.spools) || !isRecord(d.figures) || !isRecord(d.queueItems))
-    return false
-
   return (
     allValuesMatch(d.spools, isValidSpool) &&
+    allValuesMatch(d.figures, isValidFigureV1) &&
+    allValuesMatch(d.queueItems, isValidQueueItem)
+  )
+}
+
+export function validateExportEnvelope(data: unknown): data is ExportEnvelope {
+  if (!validateEnvelopeShell(data)) return false
+  if (data.version !== 2) return false
+
+  const d = data.data
+  return (
+    allValuesMatch(d.spools, isValidSpool) &&
+    allValuesMatch(d.brands, isValidBrand) &&
     allValuesMatch(d.figures, isValidFigure) &&
     allValuesMatch(d.queueItems, isValidQueueItem)
   )
+}
+
+/** Rebuild with explicit fields so stray properties (e.g. a leftover `franchise` on a v2 figure) are stripped, never persisted. */
+function rebuildBrands(brands: Record<string, Brand>): Record<string, Brand> {
+  const result: Record<string, Brand> = {}
+  for (const [id, brand] of Object.entries(brands)) {
+    result[id] = { id: brand.id, name: brand.name }
+  }
+  return result
+}
+
+function rebuildFigures(
+  figures: Record<string, Figure>
+): Record<string, Figure> {
+  const result: Record<string, Figure> = {}
+  for (const [id, figure] of Object.entries(figures)) {
+    result[id] = {
+      id: figure.id,
+      name: figure.name,
+      brandId: figure.brandId,
+      size: figure.size,
+      notes: figure.notes,
+      requiredColors: [...figure.requiredColors],
+    }
+  }
+  return result
 }
 
 export function readJsonFile(file: File): Promise<unknown> {
@@ -127,7 +189,23 @@ export function readJsonFile(file: File): Promise<unknown> {
 export async function importData(file: File): Promise<void> {
   const parsed = await readJsonFile(file)
 
-  if (!validateExportEnvelope(parsed)) {
+  let next: ReturnType<typeof toJSON>
+  if (validateV1Envelope(parsed)) {
+    const { brands, figures } = migrateV1Figures(parsed.data.figures)
+    next = {
+      spools: parsed.data.spools,
+      brands,
+      figures,
+      queueItems: parsed.data.queueItems,
+    }
+  } else if (validateExportEnvelope(parsed)) {
+    next = {
+      spools: parsed.data.spools,
+      brands: rebuildBrands(parsed.data.brands),
+      figures: rebuildFigures(parsed.data.figures),
+      queueItems: parsed.data.queueItems,
+    }
+  } else {
     throw new Error(
       "Invalid file format. Please select a file exported from 3D Print Flow."
     )
@@ -138,9 +216,9 @@ export async function importData(file: File): Promise<void> {
   setPersist(false)
   try {
     startTransition(() => {
-      fromJSON(parsed.data)
+      fromJSON(next)
     })
-    await replaceAll(parsed.data)
+    await replaceAll(next)
     setPersist(true)
   } catch (error) {
     fromJSON(previousState)

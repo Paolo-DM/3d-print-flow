@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import * as db from "~/lib/db"
 import { fromJSON, getPersist, setPersist, store, toJSON } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createBrand,
+  createFigure,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import type { QueueItem } from "~/lib/types"
 
 vi.mock("~/lib/db", () => ({
@@ -22,8 +27,10 @@ vi.mock("sonner", () => ({
 function resetStore() {
   store.setState({
     spools: new Map(),
+    brands: new Map(),
     figures: new Map(),
     queueItems: new Map(),
+    dataGeneration: 0,
   })
   setPersist(true)
   vi.clearAllMocks()
@@ -84,7 +91,7 @@ describe("store mutations", () => {
   it("createFigure adds a figure with UUID and correct data", () => {
     store.getState().createFigure({
       name: "Naruto",
-      franchise: "Naruto Shippuden",
+      brandId: "brand-1",
       size: 75,
       notes: "test note",
       requiredColors: ["spool-1"],
@@ -93,7 +100,7 @@ describe("store mutations", () => {
     expect(figures.size).toBe(1)
     const figure = [...figures.values()][0]
     expect(figure.name).toBe("Naruto")
-    expect(figure.franchise).toBe("Naruto Shippuden")
+    expect(figure.brandId).toBe("brand-1")
     expect(figure.size).toBe(75)
     expect(figure.notes).toBe("test note")
     expect(figure.requiredColors).toEqual(["spool-1"])
@@ -103,14 +110,14 @@ describe("store mutations", () => {
   it("createFigure generates a unique UUID", () => {
     store.getState().createFigure({
       name: "Naruto",
-      franchise: "",
+      brandId: null,
       size: 60,
       notes: "",
       requiredColors: [],
     })
     store.getState().createFigure({
       name: "Goku",
-      franchise: "",
+      brandId: null,
       size: 60,
       notes: "",
       requiredColors: [],
@@ -119,10 +126,10 @@ describe("store mutations", () => {
     expect(ids[0]).not.toBe(ids[1])
   })
 
-  it("updateFigure modifies name, franchise, size, notes, and requiredColors", () => {
+  it("updateFigure modifies name, brandId, size, notes, and requiredColors", () => {
     store.getState().createFigure({
       name: "Naruto",
-      franchise: "Naruto",
+      brandId: null,
       size: 60,
       notes: "",
       requiredColors: [],
@@ -130,14 +137,14 @@ describe("store mutations", () => {
     const id = [...store.getState().figures.keys()][0]
     store.getState().updateFigure(id, {
       name: "Naruto Uzumaki",
-      franchise: "Naruto Shippuden",
+      brandId: "brand-1",
       size: 80,
       notes: "updated",
       requiredColors: ["s1", "s2"],
     })
     const figure = store.getState().figures.get(id)
     expect(figure?.name).toBe("Naruto Uzumaki")
-    expect(figure?.franchise).toBe("Naruto Shippuden")
+    expect(figure?.brandId).toBe("brand-1")
     expect(figure?.size).toBe(80)
     expect(figure?.notes).toBe("updated")
     expect(figure?.requiredColors).toEqual(["s1", "s2"])
@@ -146,7 +153,7 @@ describe("store mutations", () => {
   it("updateFigure is a no-op for unknown id", () => {
     store.getState().createFigure({
       name: "Naruto",
-      franchise: "",
+      brandId: null,
       size: 60,
       notes: "",
       requiredColors: [],
@@ -232,6 +239,46 @@ describe("store mutations", () => {
     // References must be identical — true no-op avoids spurious persistence writes
     expect(store.getState().figures).toBe(beforeFigures)
     expect(store.getState().queueItems).toBe(beforeQueue)
+  })
+})
+
+describe("brand mutations", () => {
+  it("createBrand mints a brand with the trimmed name and returns its id", () => {
+    const id = store.getState().createBrand("  One Piece  ")
+    expect(id).toBeTruthy()
+    const brands = store.getState().brands
+    expect(brands.size).toBe(1)
+    expect(brands.get(id!)).toEqual({ id, name: "One Piece" })
+  })
+
+  it("createBrand returns null for an empty or whitespace-only name", () => {
+    expect(store.getState().createBrand("")).toBeNull()
+    expect(store.getState().createBrand("   ")).toBeNull()
+    expect(store.getState().brands.size).toBe(0)
+  })
+
+  it("createBrand matches an existing brand case-insensitively and returns its id", () => {
+    const first = store.getState().createBrand("Naruto")
+    const second = store.getState().createBrand("naruto")
+    const third = store.getState().createBrand("  NARUTO ")
+
+    expect(second).toBe(first)
+    expect(third).toBe(first)
+    expect(store.getState().brands.size).toBe(1)
+    expect(store.getState().brands.get(first!)?.name).toBe("Naruto")
+  })
+
+  it("createBrand does not touch state when matching an existing brand", () => {
+    store.getState().createBrand("Naruto")
+    const before = store.getState().brands
+    store.getState().createBrand("naruto")
+    expect(store.getState().brands).toBe(before)
+  })
+
+  it("createBrand generates unique UUIDs for distinct names", () => {
+    const a = store.getState().createBrand("Naruto")
+    const b = store.getState().createBrand("One Piece")
+    expect(a).not.toBe(b)
   })
 })
 
@@ -410,6 +457,12 @@ describe("persistence flag", () => {
     expect(db.writeStore).not.toHaveBeenCalled()
   })
 
+  it("brand creation triggers writeStore for the brands store", () => {
+    setPersist(true)
+    store.getState().createBrand("One Piece")
+    expect(db.writeStore).toHaveBeenCalledWith("brands", expect.any(Map))
+  })
+
   it("getPersist returns current flag value", () => {
     setPersist(false)
     expect(getPersist()).toBe(false)
@@ -421,25 +474,46 @@ describe("persistence flag", () => {
 describe("serialization", () => {
   it("toJSON converts Maps to Records", () => {
     const spool = createSpool({ name: "Red", hex: "#FF0000" })
-    store.setState({ spools: new Map([[spool.id, spool]]) })
+    const brand = createBrand({ name: "One Piece" })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      brands: new Map([[brand.id, brand]]),
+    })
     const json = toJSON()
     expect(json.spools[spool.id]).toEqual(spool)
+    expect(json.brands[brand.id]).toEqual(brand)
+  })
+
+  it("toJSON does not include dataGeneration", () => {
+    expect("dataGeneration" in toJSON()).toBe(false)
   })
 
   it("fromJSON converts Records to Maps", () => {
     const spool = createSpool()
-    const figure = createFigure()
+    const brand = createBrand()
+    const figure = createFigure({ brandId: brand.id })
     const queueItem = createQueueItem({ figureId: figure.id })
 
     fromJSON({
       spools: { [spool.id]: spool },
+      brands: { [brand.id]: brand },
       figures: { [figure.id]: figure },
       queueItems: { [queueItem.id]: queueItem },
     })
 
     expect(store.getState().spools.get(spool.id)).toEqual(spool)
+    expect(store.getState().brands.get(brand.id)).toEqual(brand)
     expect(store.getState().figures.get(figure.id)).toEqual(figure)
     expect(store.getState().queueItems.get(queueItem.id)).toEqual(queueItem)
+  })
+
+  it("fromJSON increments dataGeneration on every full replace", () => {
+    const empty = { spools: {}, brands: {}, figures: {}, queueItems: {} }
+    expect(store.getState().dataGeneration).toBe(0)
+    fromJSON(empty)
+    expect(store.getState().dataGeneration).toBe(1)
+    fromJSON(empty)
+    expect(store.getState().dataGeneration).toBe(2)
   })
 
   it("fromJSON backfills missing completedAt values for older queue items", () => {
@@ -453,6 +527,7 @@ describe("serialization", () => {
 
     fromJSON({
       spools: {},
+      brands: {},
       figures: { [figure.id]: figure },
       queueItems: {
         [legacyQueueItem.id]: legacyQueueItem as unknown as QueueItem,
@@ -466,11 +541,16 @@ describe("serialization", () => {
 
   it("toJSON → fromJSON roundtrip preserves data", () => {
     const spool = createSpool({ name: "Green", hex: "#00FF00" })
-    store.setState({ spools: new Map([[spool.id, spool]]) })
+    const brand = createBrand({ name: "Sonic" })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      brands: new Map([[brand.id, brand]]),
+    })
     const json = toJSON()
     resetStore()
     fromJSON(json)
     expect(store.getState().spools.get(spool.id)).toEqual(spool)
+    expect(store.getState().brands.get(brand.id)).toEqual(brand)
   })
 })
 
@@ -530,24 +610,32 @@ describe("persistence failure notification", () => {
     ])
   })
 
-  it("retry success dismisses the toast", async () => {
+  it("retry success rewrites all four stores and dismisses the toast", async () => {
     vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
 
-    // Reset mock so retry succeeds
-    vi.mocked(db.writeStore).mockResolvedValue(undefined)
+    // Reset mock so retry succeeds, and isolate the retry's own writes
     const actionArg = (toast.error as Mock).mock.calls[0][1]
+    vi.mocked(db.writeStore).mockClear()
+    vi.mocked(db.writeStore).mockResolvedValue(undefined)
     actionArg.action.onClick()
     await vi.waitFor(() =>
       expect(toast.dismiss).toHaveBeenCalledWith("persistence-failure")
     )
+
+    const retriedStores = vi
+      .mocked(db.writeStore)
+      .mock.calls.map((call) => call[0])
+      .sort()
+    expect(retriedStores).toEqual(["brands", "figures", "queueItems", "spools"])
   })
 
   it("retry failure shows the error toast again", async () => {
     vi.mocked(db.writeStore)
       .mockRejectedValueOnce(new Error("IDB failure")) // initial write
       .mockRejectedValueOnce(new Error("IDB failure")) // retry: spools
+      .mockRejectedValueOnce(new Error("IDB failure")) // retry: brands
       .mockRejectedValueOnce(new Error("IDB failure")) // retry: figures
       .mockRejectedValueOnce(new Error("IDB failure")) // retry: queueItems
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })

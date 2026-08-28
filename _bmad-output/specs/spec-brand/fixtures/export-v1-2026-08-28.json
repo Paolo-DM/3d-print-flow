@@ -1,0 +1,600 @@
+{
+  "version": 1,
+  "exportedAt": "2026-08-28T16:32:08.590Z",
+  "data": {
+    "spools": {
+      "63f2326b-22eb-4650-83e1-22c7e360cf5a": {
+        "id": "63f2326b-22eb-4650-83e1-22c7e360cf5a",
+        "name": "Army Dark Green",
+        "hex": "#777a5b"
+      },
+      "89a921f8-cfb2-4ec4-8c9b-aca24f53c119": {
+        "id": "89a921f8-cfb2-4ec4-8c9b-aca24f53c119",
+        "name": "Marine Blue",
+        "hex": "#287fac"
+      },
+      "e6773502-ce7a-4461-8a49-7f0d28fbda81": {
+        "id": "e6773502-ce7a-4461-8a49-7f0d28fbda81",
+        "name": "Peanut",
+        "hex": "#e1ba9c"
+      },
+      "sp-beige": {
+        "id": "sp-beige",
+        "name": "Beige",
+        "hex": "#d4b896"
+      },
+      "sp-black": {
+        "id": "sp-black",
+        "name": "Black",
+        "hex": "#1a1a1a"
+      },
+      "sp-blue": {
+        "id": "sp-blue",
+        "name": "Blue",
+        "hex": "#2563eb"
+      },
+      "sp-brown": {
+        "id": "sp-brown",
+        "name": "Brown",
+        "hex": "#78533a"
+      },
+      "sp-dark-blue": {
+        "id": "sp-dark-blue",
+        "name": "Dark Blue",
+        "hex": "#1e3a6e"
+      },
+      "sp-dark-green": {
+        "id": "sp-dark-green",
+        "name": "Dark Green",
+        "hex": "#166534"
+      },
+      "sp-dark-red": {
+        "id": "sp-dark-red",
+        "name": "Dark Red",
+        "hex": "#8b1a1a"
+      },
+      "sp-gold": {
+        "id": "sp-gold",
+        "name": "Gold",
+        "hex": "#d4a017"
+      },
+      "sp-green": {
+        "id": "sp-green",
+        "name": "Green",
+        "hex": "#22c55e"
+      },
+      "sp-grey": {
+        "id": "sp-grey",
+        "name": "Grey",
+        "hex": "#9ca3af"
+      },
+      "sp-lemon-yellow": {
+        "id": "sp-lemon-yellow",
+        "name": "Lemon Yellow",
+        "hex": "#f7e64a"
+      },
+      "sp-light-blue": {
+        "id": "sp-light-blue",
+        "name": "Cyan",
+        "hex": "#60a5fa"
+      },
+      "sp-orange": {
+        "id": "sp-orange",
+        "name": "Orange",
+        "hex": "#f97316"
+      },
+      "sp-pink": {
+        "id": "sp-pink",
+        "name": "Pink",
+        "hex": "#ec4899"
+      },
+      "sp-purple": {
+        "id": "sp-purple",
+        "name": "Purple",
+        "hex": "#8b5cf6"
+      },
+      "sp-red": {
+        "id": "sp-red",
+        "name": "Red",
+        "hex": "#dc2626"
+      },
+      "sp-silver": {
+        "id": "sp-silver",
+        "name": "Silver",
+        "hex": "#c0c0c0"
+      },
+      "sp-transparent": {
+        "id": "sp-transparent",
+        "name": "Transparent",
+        "hex": "#c8e0f4"
+      },
+      "sp-white": {
+        "id": "sp-white",
+        "name": "White",
+        "hex": "#f0eeee"
+      },
+      "sp-yellow": {
+        "id": "sp-yellow",
+        "name": "Yellow",
+        "hex": "#eab308"
+      },
+      "0d82d004-fb5e-45c2-89c5-e800f32de475": {
+        "id": "0d82d004-fb5e-45c2-89c5-e800f32de475",
+        "name": "Ice Blue",
+        "hex": "#93d2e6"
+      },
+      "6ecb2cf3-b881-470d-89d0-163ebc1d7f59": {
+        "id": "6ecb2cf3-b881-470d-89d0-163ebc1d7f59",
+        "name": "Green Leaf",
+        "hex": "#398b55"
+      }
+    },
+    "figures": {
+      "0e70b18b-366e-4e7a-b6ba-43559faf17a6": {
+        "id": "0e70b18b-366e-4e7a-b6ba-43559faf17a6",
+        "name": "Sanji",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-yellow",
+          "sp-black",
+          "sp-red",
+          "sp-white"
+        ]
+      },
+      "2c52b287-d3b2-4f22-b818-e37ffb73b41b": {
+        "id": "2c52b287-d3b2-4f22-b818-e37ffb73b41b",
+        "name": "Jinbe",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-black",
+          "sp-light-blue",
+          "sp-white",
+          "sp-red",
+          "sp-orange",
+          "sp-blue",
+          "sp-brown"
+        ]
+      },
+      "369ad38e-6184-4798-8e21-6f6e565070ac": {
+        "id": "369ad38e-6184-4798-8e21-6f6e565070ac",
+        "name": "Sonic the Hedgehog",
+        "franchise": "Sonic",
+        "size": 100,
+        "notes": "",
+        "requiredColors": [
+          "sp-red",
+          "sp-white",
+          "sp-black",
+          "sp-beige",
+          "89a921f8-cfb2-4ec4-8c9b-aca24f53c119"
+        ]
+      },
+      "452aff7d-af30-4193-a96f-ef608a466018": {
+        "id": "452aff7d-af30-4193-a96f-ef608a466018",
+        "name": "Nico Robin",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-black",
+          "sp-beige",
+          "sp-blue",
+          "sp-orange",
+          "sp-white",
+          "sp-green",
+          "sp-red",
+          "sp-grey",
+          "sp-pink"
+        ]
+      },
+      "48b4d1fe-b34f-4930-b832-fa77ef5d38da": {
+        "id": "48b4d1fe-b34f-4930-b832-fa77ef5d38da",
+        "name": "Zoro",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-green",
+          "sp-black",
+          "sp-white",
+          "sp-yellow",
+          "sp-red"
+        ]
+      },
+      "4c12a2dd-a25f-4f0e-a275-35f00a4a6442": {
+        "id": "4c12a2dd-a25f-4f0e-a275-35f00a4a6442",
+        "name": "Chopper",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "e6773502-ce7a-4461-8a49-7f0d28fbda81",
+          "sp-white",
+          "sp-red",
+          "sp-black",
+          "sp-blue",
+          "sp-pink",
+          "sp-brown",
+          "sp-grey"
+        ]
+      },
+      "5f1922e4-5cbd-437d-981b-ea5ca5664bca": {
+        "id": "5f1922e4-5cbd-437d-981b-ea5ca5664bca",
+        "name": "Kakashi",
+        "franchise": "Naruto",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "63f2326b-22eb-4650-83e1-22c7e360cf5a",
+          "sp-dark-blue",
+          "sp-black",
+          "sp-beige",
+          "sp-white",
+          "sp-red",
+          "sp-grey"
+        ]
+      },
+      "665e7d42-8c0b-4964-8467-a901384c752c": {
+        "id": "665e7d42-8c0b-4964-8467-a901384c752c",
+        "name": "Brook",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-black",
+          "sp-blue",
+          "sp-yellow",
+          "sp-white",
+          "sp-brown"
+        ]
+      },
+      "73b3c405-28f4-4c10-b240-a68c966e222c": {
+        "id": "73b3c405-28f4-4c10-b240-a68c966e222c",
+        "name": "Nami",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-orange",
+          "sp-beige",
+          "sp-black",
+          "sp-white",
+          "sp-light-blue",
+          "sp-blue",
+          "sp-brown",
+          "sp-grey"
+        ]
+      },
+      "9f27c343-f9a2-43c7-ae04-e96c4182e1ba": {
+        "id": "9f27c343-f9a2-43c7-ae04-e96c4182e1ba",
+        "name": "Luffy",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-black",
+          "sp-blue",
+          "sp-red",
+          "sp-yellow",
+          "sp-brown",
+          "sp-white"
+        ]
+      },
+      "bb738ba9-d974-446e-bb80-1ff9ef287f59": {
+        "id": "bb738ba9-d974-446e-bb80-1ff9ef287f59",
+        "name": "Franky",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-light-blue",
+          "sp-black",
+          "sp-beige",
+          "sp-blue",
+          "sp-red",
+          "sp-yellow",
+          "sp-grey",
+          "sp-pink",
+          "sp-white"
+        ]
+      },
+      "e4866e98-e98a-4514-8560-81855e7e4ac7": {
+        "id": "e4866e98-e98a-4514-8560-81855e7e4ac7",
+        "name": "Usopp",
+        "franchise": "One Piece",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-beige",
+          "sp-grey",
+          "63f2326b-22eb-4650-83e1-22c7e360cf5a",
+          "e6773502-ce7a-4461-8a49-7f0d28fbda81",
+          "sp-black",
+          "sp-light-blue",
+          "sp-orange",
+          "sp-white",
+          "sp-brown"
+        ]
+      },
+      "fig-angel": {
+        "id": "fig-angel",
+        "name": "Angel",
+        "franchise": "Lilo & Stitch",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-pink",
+          "sp-purple",
+          "sp-white",
+          "sp-black"
+        ]
+      },
+      "fig-charmander": {
+        "id": "fig-charmander",
+        "name": "Charmander",
+        "franchise": "Pokemon",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-orange",
+          "sp-lemon-yellow",
+          "sp-red"
+        ]
+      },
+      "fig-eevee": {
+        "id": "fig-eevee",
+        "name": "Eevee",
+        "franchise": "Pokemon",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-brown",
+          "sp-beige",
+          "sp-white",
+          "sp-black"
+        ]
+      },
+      "fig-goku": {
+        "id": "fig-goku",
+        "name": "Goku",
+        "franchise": "Dragon Ball",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-orange",
+          "sp-black",
+          "sp-yellow",
+          "sp-beige",
+          "sp-blue"
+        ]
+      },
+      "fig-pikachu": {
+        "id": "fig-pikachu",
+        "name": "Pikachu",
+        "franchise": "Pokemon",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-yellow",
+          "sp-black",
+          "sp-red",
+          "sp-brown"
+        ]
+      },
+      "fig-spiderman": {
+        "id": "fig-spiderman",
+        "name": "Spiderman",
+        "franchise": "Marvel",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-red",
+          "sp-dark-blue",
+          "sp-black",
+          "sp-white"
+        ]
+      },
+      "fig-squirtle": {
+        "id": "fig-squirtle",
+        "name": "Squirtle",
+        "franchise": "Pokemon",
+        "size": 60,
+        "notes": "Per il guscio o giallo chiaro o beige",
+        "requiredColors": [
+          "sp-light-blue",
+          "sp-brown",
+          "sp-red",
+          "sp-white",
+          "sp-lemon-yellow"
+        ]
+      },
+      "fig-stitch": {
+        "id": "fig-stitch",
+        "name": "Stitch",
+        "franchise": "Lilo & Stitch",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-blue",
+          "sp-light-blue",
+          "sp-purple",
+          "sp-pink",
+          "sp-black",
+          "sp-white"
+        ]
+      },
+      "fig-venom": {
+        "id": "fig-venom",
+        "name": "Venom",
+        "franchise": "Marvel",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-black",
+          "sp-white",
+          "sp-red"
+        ]
+      },
+      "dffa2690-258c-4c3b-afee-e652437667e2": {
+        "id": "dffa2690-258c-4c3b-afee-e652437667e2",
+        "name": "Venusaur",
+        "franchise": "Pokemon",
+        "size": 60,
+        "notes": "",
+        "requiredColors": [
+          "sp-white",
+          "sp-pink",
+          "0d82d004-fb5e-45c2-89c5-e800f32de475",
+          "6ecb2cf3-b881-470d-89d0-163ebc1d7f59",
+          "sp-yellow",
+          "sp-red",
+          "sp-brown"
+        ]
+      }
+    },
+    "queueItems": {
+      "1ab44f31-5344-4188-b5c0-838d47ab7c61": {
+        "id": "1ab44f31-5344-4188-b5c0-838d47ab7c61",
+        "figureId": "fig-angel",
+        "type": "order",
+        "completedColors": [
+          "sp-pink",
+          "sp-purple",
+          "sp-white",
+          "sp-black"
+        ],
+        "completedAt": "2026-04-01T08:26:13.501Z"
+      },
+      "3c29ac35-f969-4f7b-a4f9-f5e77da22e93": {
+        "id": "3c29ac35-f969-4f7b-a4f9-f5e77da22e93",
+        "figureId": "369ad38e-6184-4798-8e21-6f6e565070ac",
+        "type": "stock",
+        "completedColors": [
+          "89a921f8-cfb2-4ec4-8c9b-aca24f53c119"
+        ],
+        "completedAt": null
+      },
+      "7d2df7d9-842b-4d33-bcb5-d960501a4822": {
+        "id": "7d2df7d9-842b-4d33-bcb5-d960501a4822",
+        "figureId": "665e7d42-8c0b-4964-8467-a901384c752c",
+        "type": "order",
+        "completedColors": [
+          "sp-black",
+          "sp-blue",
+          "sp-yellow",
+          "sp-white",
+          "sp-brown",
+          "sp-beige"
+        ],
+        "completedAt": "2026-04-08T16:01:51.763Z"
+      },
+      "b6ee7c14-15bb-450a-83f2-22467a1c9fc4": {
+        "id": "b6ee7c14-15bb-450a-83f2-22467a1c9fc4",
+        "figureId": "fig-pikachu",
+        "type": "stock",
+        "completedColors": [
+          "sp-black",
+          "sp-red",
+          "sp-yellow",
+          "sp-brown"
+        ],
+        "completedAt": "2026-08-12T13:16:46.541Z"
+      },
+      "c0eabe80-d85a-4bc5-8377-dd3a434d329f": {
+        "id": "c0eabe80-d85a-4bc5-8377-dd3a434d329f",
+        "figureId": "2c52b287-d3b2-4f22-b818-e37ffb73b41b",
+        "type": "order",
+        "completedColors": [
+          "sp-orange",
+          "sp-red",
+          "sp-blue",
+          "sp-black",
+          "sp-brown",
+          "sp-beige",
+          "sp-white",
+          "sp-light-blue"
+        ],
+        "completedAt": "2026-04-09T18:44:22.556Z"
+      },
+      "d0ebf1cc-580f-449d-9143-16d909c20e51": {
+        "id": "d0ebf1cc-580f-449d-9143-16d909c20e51",
+        "figureId": "9f27c343-f9a2-43c7-ae04-e96c4182e1ba",
+        "type": "order",
+        "completedColors": [
+          "sp-black",
+          "sp-blue",
+          "sp-red",
+          "sp-yellow",
+          "sp-brown",
+          "sp-white",
+          "sp-beige"
+        ],
+        "completedAt": "2026-04-08T19:23:45.876Z"
+      },
+      "d234de79-3dcf-49f2-a3f9-722f47b27d9a": {
+        "id": "d234de79-3dcf-49f2-a3f9-722f47b27d9a",
+        "figureId": "bb738ba9-d974-446e-bb80-1ff9ef287f59",
+        "type": "order",
+        "completedColors": [
+          "sp-yellow",
+          "sp-beige",
+          "sp-blue",
+          "sp-pink",
+          "sp-grey",
+          "sp-light-blue",
+          "sp-white",
+          "sp-red",
+          "sp-black"
+        ],
+        "completedAt": "2026-04-11T05:56:37.889Z"
+      },
+      "f010f04e-0405-47e2-82e2-ef6618a30573": {
+        "id": "f010f04e-0405-47e2-82e2-ef6618a30573",
+        "figureId": "fig-angel",
+        "type": "stock",
+        "completedColors": [
+          "sp-black",
+          "sp-white",
+          "sp-purple",
+          "sp-pink"
+        ],
+        "completedAt": "2026-03-31T16:08:09.743Z"
+      },
+      "f088d3f8-c625-447d-8dcc-7b5a7a23369e": {
+        "id": "f088d3f8-c625-447d-8dcc-7b5a7a23369e",
+        "figureId": "9f27c343-f9a2-43c7-ae04-e96c4182e1ba",
+        "type": "order",
+        "completedColors": [
+          "sp-brown",
+          "sp-beige",
+          "sp-black",
+          "sp-blue",
+          "sp-yellow",
+          "sp-red",
+          "sp-white"
+        ],
+        "completedAt": "2026-04-08T13:29:02.249Z"
+      },
+      "qi-charmander": {
+        "id": "qi-charmander",
+        "figureId": "fig-charmander",
+        "type": "stock",
+        "completedColors": [
+          "sp-orange",
+          "sp-lemon-yellow",
+          "sp-red"
+        ],
+        "completedAt": "2026-03-31T17:19:06.007Z"
+      }
+    }
+  }
+}

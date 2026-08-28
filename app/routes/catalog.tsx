@@ -3,7 +3,8 @@ import { Shapes } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
 import { computeAffectedQueueItems } from "~/lib/derived"
-import type { Figure } from "~/lib/types"
+import type { Brand, Figure, Spool } from "~/lib/types"
+import { cn } from "~/lib/utils"
 import { useIsMobile } from "~/hooks/use-mobile"
 import { FigureCard } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
@@ -39,11 +40,166 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet"
 
+/** Filter/group id for figures without a resolvable brand. */
+const NO_BRAND = "no-brand"
+
+interface BrandGroup {
+  id: string
+  name: string
+  figures: Figure[]
+}
+
+function groupFiguresByBrand(
+  figures: Figure[],
+  brands: Map<string, Brand>
+): BrandGroup[] {
+  const byBrandId = new Map<string, Figure[]>()
+  for (const figure of figures) {
+    // An unresolvable brandId groups under "No brand" (orphan tolerance)
+    const groupId =
+      figure.brandId !== null && brands.has(figure.brandId)
+        ? figure.brandId
+        : NO_BRAND
+    const group = byBrandId.get(groupId)
+    if (group) {
+      group.push(figure)
+    } else {
+      byBrandId.set(groupId, [figure])
+    }
+  }
+
+  const brandGroups: BrandGroup[] = []
+  for (const [groupId, groupFigures] of byBrandId) {
+    if (groupId === NO_BRAND) continue
+    const brand = brands.get(groupId)
+    if (!brand) continue
+    brandGroups.push({ id: brand.id, name: brand.name, figures: groupFigures })
+  }
+  brandGroups.sort((a, b) => a.name.localeCompare(b.name))
+
+  const brandless = byBrandId.get(NO_BRAND)
+  if (brandless) {
+    brandGroups.push({ id: NO_BRAND, name: "No brand", figures: brandless })
+  }
+
+  return brandGroups
+}
+
+function BrandGroupedCatalog({
+  figures,
+  brands,
+  spools,
+  onEdit,
+  onDelete,
+}: {
+  figures: Figure[]
+  brands: Map<string, Brand>
+  spools: Map<string, Spool>
+  onEdit: (figure: Figure) => void
+  onDelete: (figure: Figure) => void
+}) {
+  // Deselected-id set: groups appearing later (inline create, import) are
+  // visible by default. The whole component is key-reset on import.
+  const [deselectedIds, setDeselectedIds] = useState<ReadonlySet<string>>(
+    new Set()
+  )
+
+  const groups = groupFiguresByBrand(figures, brands)
+  const visibleGroups = groups.filter((group) => !deselectedIds.has(group.id))
+  const allDeselected = groups.length > 0 && visibleGroups.length === 0
+
+  function toggleGroup(id: string) {
+    setDeselectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  return (
+    <div>
+      <div
+        className="mb-6 flex flex-wrap gap-2"
+        role="group"
+        aria-label="Filter by brand"
+        data-testid="brand-filter"
+      >
+        {groups.map((group) => {
+          const selected = !deselectedIds.has(group.id)
+          return (
+            <button
+              key={group.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => toggleGroup(group.id)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                selected
+                  ? "border-transparent bg-accent"
+                  : "border-border bg-card text-muted-foreground"
+              )}
+              data-testid={`brand-filter-${group.id}`}
+            >
+              {group.name}
+            </button>
+          )
+        })}
+      </div>
+
+      {allDeselected ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Shapes />
+            </EmptyMedia>
+            <EmptyTitle>All brands hidden</EmptyTitle>
+            <EmptyDescription>
+              Every brand is deselected. Show all brands to see your figures
+              again.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setDeselectedIds(new Set())}>
+              Show all
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <div className="animate-fade-in-up space-y-8">
+          {visibleGroups.map((group) => (
+            <section key={group.id} data-testid="brand-section">
+              <h2 className="mb-3 text-lg font-semibold">{group.name}</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+                {group.figures.map((figure) => (
+                  <FigureCard
+                    key={figure.id}
+                    figure={figure}
+                    brands={brands}
+                    spools={spools}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function FigureCatalog() {
   const figures = usePrintFlowStore((s) => s.figures)
+  const brands = usePrintFlowStore((s) => s.brands)
   const spools = usePrintFlowStore((s) => s.spools)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const deleteFigure = usePrintFlowStore((s) => s.deleteFigure)
+  const dataGeneration = usePrintFlowStore((s) => s.dataGeneration)
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
 
@@ -126,17 +282,15 @@ export default function FigureCatalog() {
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-          {figureList.map((figure) => (
-            <FigureCard
-              key={figure.id}
-              figure={figure}
-              spools={spools}
-              onEdit={handleEditFigure}
-              onDelete={handleDeleteFigure}
-            />
-          ))}
-        </div>
+        // key-reset on full data replace so an import resets the filter
+        <BrandGroupedCatalog
+          key={dataGeneration}
+          figures={figureList}
+          brands={brands}
+          spools={spools}
+          onEdit={handleEditFigure}
+          onDelete={handleDeleteFigure}
+        />
       )}
 
       {isMobile ? (
@@ -176,7 +330,10 @@ export default function FigureCatalog() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleConfirmDelete}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

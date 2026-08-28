@@ -42,6 +42,7 @@ export default function ColorView() {
   )
 
   const spools = usePrintFlowStore((s) => s.spools)
+  const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const navigate = useNavigate()
@@ -219,6 +220,7 @@ export default function ColorView() {
             entry={entry}
             rank={index + 1}
             figures={figures}
+            brands={brands}
             queueItems={queueItems}
             spools={spools}
             currentSpoolId={entry.spool.id}
@@ -256,6 +258,7 @@ export default function ColorView() {
               entry={snapshot.entry}
               rank={snapshot.rank}
               figures={figures}
+              brands={brands}
               queueItems={queueItems}
               spools={spools}
               currentSpoolId={spoolId}
