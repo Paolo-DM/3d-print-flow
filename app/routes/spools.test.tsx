@@ -72,6 +72,31 @@ describe("SpoolLibrary route", () => {
     expect(screen.getByText("Blue ABS")).toBeTruthy()
   })
 
+  it("renders spool cards alphabetically by name, case-insensitively and numeric-aware", () => {
+    const zinc = createSpool({ name: "Zinc", hex: "#71717A" })
+    const spool10 = createSpool({ name: "Spool 10", hex: "#111111" })
+    const amber = createSpool({ name: "amber", hex: "#F59E0B" })
+    const spool2 = createSpool({ name: "Spool 2", hex: "#222222" })
+    const blue = createSpool({ name: "Blue", hex: "#0000FF" })
+
+    store.setState({
+      spools: new Map([
+        [zinc.id, zinc],
+        [spool10.id, spool10],
+        [amber.id, amber],
+        [spool2.id, spool2],
+        [blue.id, blue],
+      ]),
+    })
+
+    renderSpools()
+
+    const names = screen
+      .getAllByText(/^(?:Zinc|amber|Blue|Spool 2|Spool 10)$/)
+      .map((el) => el.textContent)
+    expect(names).toEqual(["amber", "Blue", "Spool 2", "Spool 10", "Zinc"])
+  })
+
   it("renders page header with Spool Library title and enabled Add Spool button", () => {
     renderSpools()
 

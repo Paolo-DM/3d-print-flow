@@ -43,7 +43,9 @@ export default function SpoolLibrary() {
   const spools = usePrintFlowStore((s) => s.spools)
   const figures = usePrintFlowStore((s) => s.figures)
   const deleteSpool = usePrintFlowStore((s) => s.deleteSpool)
-  const spoolList = Array.from(spools.values())
+  const spoolList = Array.from(spools.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "en", { sensitivity: "base", numeric: true })
+  )
   const isMobile = useIsMobile()
 
   const [open, setOpen] = useState(false)

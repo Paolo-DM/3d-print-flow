@@ -45,3 +45,6 @@
 
 - **Theme cookie missing `secure` flag** — `themeCookie` omits `secure: true`, so on HTTPS deployments the cookie is also sent over plain HTTP. Low risk since it's only a UI preference, not a session token. Add conditionally based on environment when deploying to production.
 - **No unit tests for cookie-based theme logic** — Old `dark-mode.test.ts` was deleted (tested the removed inline script). Server-side `parseTheme` logic, the action route, and the toggle component have no test coverage. Consider adding tests for the cookie parse/serialize round-trip and action validation.
+- source_spec: `_bmad-output/implementation-artifacts/spec-spool-sort-and-theme-toggle-perf.md`
+  summary: Pre-existing test failure in app/routes/completed.test.tsx ("shows completion date", regex /Completed\s+Mar/) — date formatting appears locale/environment dependent.
+  evidence: Fails on clean baseline f47c7ae with this spec's changes stashed (verified 2026-08-28), so unrelated to this story; 1 failed / 276 passed on main.

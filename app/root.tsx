@@ -7,11 +7,11 @@ import {
   data,
   isRouteErrorResponse,
   useLocation,
-  useRouteLoaderData,
 } from "react-router"
 
 import type { Route } from "./+types/root"
 import { AppSidebar } from "~/components/AppSidebar"
+import { useOptimisticTheme } from "~/hooks/use-optimistic-theme"
 import { Toaster } from "~/components/ui/sonner"
 import {
   SidebarInset,
@@ -53,8 +53,7 @@ export function HydrateFallback() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const loaderData = useRouteLoaderData<typeof loader>("root")
-  const theme: Theme = loaderData?.theme ?? "dark"
+  const theme = useOptimisticTheme()
 
   return (
     <html lang="en" className={theme}>
