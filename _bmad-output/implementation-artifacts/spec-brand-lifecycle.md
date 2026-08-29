@@ -14,6 +14,8 @@ context:
   - '{project-root}/_bmad-output/project-context.md'
 ---
 
+> **Superseded in part (2026-08-29):** brand merging was removed by `spec-brand-merge-removal.md`. Everything below describing `mergeBrands`, the "Merge into…" selector, or the collision→merge flow is revision 1 as built — historical, no longer current.
+
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
 ## Intent

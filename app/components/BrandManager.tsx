@@ -22,21 +22,17 @@ import {
   EmptyTitle,
 } from "~/components/ui/empty"
 import { Input } from "~/components/ui/input"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover"
 
 interface BrandRow {
   brand: Brand
   figureCount: number
 }
 
-/** Both merge entry paths — explicit selector and rename collision — land here. */
-interface PendingMerge {
-  sourceId: string
-  targetId: string
+type RenameError = "invalid" | "collision"
+
+const RENAME_ERROR_MESSAGES: Record<RenameError, string> = {
+  invalid: "Enter a brand name.",
+  collision: "This name is already in use.",
 }
 
 function figureLabel(count: number) {
@@ -45,20 +41,17 @@ function figureLabel(count: number) {
 
 /**
  * Modal *content* for brand lifecycle management — the Sheet/Drawer shell that
- * hosts it lives in the catalog route. Rows, counts, and the merge-target list
- * derive from the live store maps on every render; nothing is snapshotted.
+ * hosts it lives in the catalog route. Rows and counts derive from the live
+ * store maps on every render; nothing is snapshotted.
  */
 export function BrandManager() {
   const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
   const renameBrand = usePrintFlowStore((s) => s.renameBrand)
-  const mergeBrands = usePrintFlowStore((s) => s.mergeBrands)
   const deleteBrand = usePrintFlowStore((s) => s.deleteBrand)
 
   const [edit, setEdit] = useState<{ id: string; text: string } | null>(null)
-  const [renameRejected, setRenameRejected] = useState(false)
-  const [mergeSourceId, setMergeSourceId] = useState<string | null>(null)
-  const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null)
+  const [renameError, setRenameError] = useState<RenameError | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Strict brandId equality — the same rule the store commands apply, so a
@@ -80,11 +73,6 @@ export function BrandManager() {
     }))
     .toSorted((a, b) => a.brand.name.localeCompare(b.brand.name))
 
-  const mergeSource = pendingMerge ? brands.get(pendingMerge.sourceId) : null
-  const mergeTarget = pendingMerge ? brands.get(pendingMerge.targetId) : null
-  const mergeCount = pendingMerge
-    ? (figureCounts.get(pendingMerge.sourceId) ?? 0)
-    : 0
   const deletingBrand = deletingId ? brands.get(deletingId) : null
   const deletingCount = deletingId ? (figureCounts.get(deletingId) ?? 0) : 0
 
@@ -107,7 +95,7 @@ export function BrandManager() {
       if (target.dataset.renameField === undefined) return
       event.preventDefault()
       setEdit(null)
-      setRenameRejected(false)
+      setRenameError(null)
     }
     document.addEventListener("keydown", handleEscape, { capture: true })
     return () =>
@@ -116,12 +104,12 @@ export function BrandManager() {
 
   function startRename(brand: Brand) {
     setEdit({ id: brand.id, text: brand.name })
-    setRenameRejected(false)
+    setRenameError(null)
   }
 
   function cancelRename() {
     setEdit(null)
-    setRenameRejected(false)
+    setRenameError(null)
   }
 
   function submitRename() {
@@ -129,11 +117,11 @@ export function BrandManager() {
     const result = renameBrand(edit.id, edit.text)
     switch (result.type) {
       case "invalid":
-        setRenameRejected(true)
+        setRenameError("invalid")
         return
       case "collision":
-        // Stay in edit mode: cancelling the merge returns the typed text.
-        setPendingMerge({ sourceId: edit.id, targetId: result.existingId })
+        // Stay in edit mode with the typed text intact for correction.
+        setRenameError("collision")
         return
       case "renamed":
       case "unchanged":
@@ -155,20 +143,6 @@ export function BrandManager() {
     e.preventDefault()
     e.stopPropagation()
     submitRename()
-  }
-
-  function selectMergeTarget(sourceId: string, targetId: string) {
-    setMergeSourceId(null)
-    setPendingMerge({ sourceId, targetId })
-  }
-
-  function confirmMerge() {
-    if (!pendingMerge) return
-    const { sourceId } = pendingMerge
-    const result = mergeBrands(sourceId, pendingMerge.targetId)
-    setPendingMerge(null)
-    // Any non-merged result is a concurrent change the live rows already show.
-    if (result.type === "merged" && edit?.id === sourceId) cancelRename()
   }
 
   function confirmDelete() {
@@ -208,15 +182,15 @@ export function BrandManager() {
                         autoFocus
                         value={edit.text}
                         aria-label={`Brand name for ${brand.name}`}
-                        aria-invalid={renameRejected}
+                        aria-invalid={renameError !== null}
                         aria-describedby={
-                          renameRejected
+                          renameError !== null
                             ? `brand-rename-error-${brand.id}`
                             : undefined
                         }
                         onChange={(e) => {
                           setEdit({ id: brand.id, text: e.target.value })
-                          setRenameRejected(false)
+                          setRenameError(null)
                         }}
                         onKeyDown={handleRenameKeyDown}
                         data-rename-field=""
@@ -240,14 +214,14 @@ export function BrandManager() {
                         Cancel
                       </Button>
                     </div>
-                    {renameRejected ? (
+                    {renameError !== null ? (
                       <p
                         id={`brand-rename-error-${brand.id}`}
                         role="alert"
                         className="text-sm text-destructive"
                         data-testid={`brand-rename-error-${brand.id}`}
                       >
-                        Enter a brand name.
+                        {RENAME_ERROR_MESSAGES[renameError]}
                       </p>
                     ) : null}
                   </div>
@@ -261,53 +235,6 @@ export function BrandManager() {
                         {figureLabel(figureCount)}
                       </p>
                     </div>
-                    <Popover
-                      modal
-                      open={mergeSourceId === brand.id}
-                      onOpenChange={(nextOpen) =>
-                        setMergeSourceId(nextOpen ? brand.id : null)
-                      }
-                    >
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={rows.length < 2}
-                          data-testid={`brand-merge-${brand.id}`}
-                        >
-                          {/* The visible label stays part of the accessible
-                              name (WCAG 2.5.3); the brand only disambiguates. */}
-                          Merge into&hellip;
-                          <span className="sr-only"> ({brand.name})</span>
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-56">
-                        <div
-                          role="group"
-                          aria-label={`Merge ${brand.name} into`}
-                          className="flex max-h-56 flex-col gap-0.5 overflow-y-auto"
-                        >
-                          {rows
-                            .filter((row) => row.brand.id !== brand.id)
-                            .map((row) => (
-                              <button
-                                key={row.brand.id}
-                                type="button"
-                                onClick={() =>
-                                  selectMergeTarget(brand.id, row.brand.id)
-                                }
-                                className="flex items-center rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
-                                data-testid={`brand-merge-target-${row.brand.id}`}
-                              >
-                                <span className="truncate">
-                                  {row.brand.name}
-                                </span>
-                              </button>
-                            ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
                     <Button
                       type="button"
                       variant="ghost"
@@ -335,31 +262,6 @@ export function BrandManager() {
           </ul>
         )}
       </div>
-
-      <AlertDialog
-        open={pendingMerge !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setPendingMerge(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Merge Brand</AlertDialogTitle>
-            <AlertDialogDescription>
-              {/* Both brands must resolve live: during the exit animation (and
-                  on a concurrent vanish) the state is already cleared, and a
-                  brief blank beats rendering "undefined". Counts stay derived. */}
-              {mergeSource && mergeTarget
-                ? `Merging "${mergeSource.name}" into "${mergeTarget.name}" moves ${figureLabel(mergeCount)} and deletes "${mergeSource.name}".`
-                : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMerge}>Merge</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog
         open={deletingId !== null}

@@ -719,31 +719,6 @@ describe("brand manager from the catalog", () => {
     expect(store.getState().brands.get("b-marvel")?.name).toBe("Marvel")
   })
 
-  it("merged figures adopt the target's filter state and the source group disappears", () => {
-    seedManagedCatalog()
-    renderCatalog()
-
-    // Deselect the merge target before merging into it
-    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
-
-    openManager()
-    fireEvent.click(screen.getByTestId("brand-merge-b-marvel"))
-    fireEvent.click(screen.getByTestId("brand-merge-target-b-pokemon"))
-    fireEvent.click(screen.getByRole("button", { name: "Merge" }))
-    closeModal()
-
-    // Venom moved under the deselected target, so it stays hidden
-    expect(sectionHeadings()).toEqual(["No brand"])
-    expect(screen.queryByText("Venom")).toBeNull()
-    expect(screen.queryByTestId("brand-filter-b-marvel")).toBeNull()
-
-    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
-
-    expect(sectionHeadings()).toEqual(["Pokemon", "No brand"])
-    expect(screen.getByText("Venom")).toBeTruthy()
-    expect(screen.getByText("Pikachu")).toBeTruthy()
-  })
-
   it("deleted-brand figures land in a deselected 'No brand' group and stay hidden", () => {
     seedManagedCatalog()
     renderCatalog()
@@ -798,7 +773,7 @@ describe("brand manager from the catalog", () => {
     expect(document.body.style.pointerEvents).not.toBe("none")
   })
 
-  it("cancelling the merge dialog leaves the manager open and interactive (Drawer)", () => {
+  it("cancelling the delete dialog leaves the manager open and interactive (Drawer)", () => {
     const originalInnerWidth = window.innerWidth
     Object.defineProperty(window, "innerWidth", {
       writable: true,
@@ -817,8 +792,7 @@ describe("brand manager from the catalog", () => {
         })
       ).toBeTruthy()
 
-      fireEvent.click(screen.getByTestId("brand-merge-b-marvel"))
-      fireEvent.click(screen.getByTestId("brand-merge-target-b-pokemon"))
+      fireEvent.click(screen.getByLabelText("Delete Marvel"))
       expect(screen.getByRole("alertdialog")).toBeTruthy()
 
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }))

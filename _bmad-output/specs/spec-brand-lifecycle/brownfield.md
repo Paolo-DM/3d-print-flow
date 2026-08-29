@@ -1,19 +1,26 @@
 # Brownfield — What Exists and What This Touches
 
-Verified against the working tree on 2026-08-28 at commit bdb7375. Where this differs from `../spec-brand/brownfield.md` (a pre-implementation snapshot), this file wins.
+Revision 1 of this spec (rename + merge + delete) shipped in 35925cb with follow-ups bdb7375/2479cd4/632d7ee; the merge-removal revision was built on 2026-08-29 on top of 632d7ee. Where this differs from `../spec-brand/brownfield.md` (a pre-implementation snapshot), this file wins.
 
-## Data layer
+## Removed by the 2026-08-29 build
 
-- `app/lib/store.ts` — Zustand store of four `Map`s (`spools`, `brands`, `figures`, `queueItems`) plus `dataGeneration` (incremented by `fromJSON` on every full replace; UI key-resets on it). `createBrand(name)` already returns the matched-or-minted id or null (trim, brandKey dedup, first-seen casing). **No brand update/delete actions exist yet.** The persistence subscriber (store.ts:220) writes per-store on map identity change — a one-`set()` brands+figures command therefore yields two `writeStore` transactions; `retryPersistence` already covers all four stores.
-- `app/lib/migration.ts` — exports `brandKey(name)` (= `name.trim().toLowerCase()`); reuse it, don't duplicate. `migrateV1Figures` derives unique non-blank brands by construction, so the v1 import path needs no CAP-6 validation.
-- `app/lib/export-import.ts` — `isValidBrand` currently checks only that `id`/`name` are strings: blank names and duplicate brandKeys pass today (the CAP-6 gap). `rebuildBrands`/`rebuildFigures` strip stray fields on v2 import. Invalid-format message (export-import.ts:210): `"Invalid file format. Please select a file exported from 3D Print Flow."` `importData` does snapshot-rollback with `setPersist(false)`, `startTransition(fromJSON)`, atomic `replaceAll`.
+- `app/lib/store.ts` — `MergeBrandsResult` and `mergeBrands` deleted; `renameBrand`'s `collision` variant no longer carries `existingId` (it existed solely for the merge offer).
+- `app/components/BrandManager.tsx` — the "Merge into…" target selector, the merge AlertDialog, and the rename-collision → merge wiring deleted; a rename collision now shows an inline "This name is already in use." rejection and keeps the row in edit mode with the typed text.
+- The merge test suites; collision tests assert the inline rejection instead, and a negative test pins that rows offer only rename and delete.
+- `twMerge` in `app/lib/utils.ts` is unrelated (tailwind-merge) and stays.
 
-## UI
+## Data layer (post-revision-1 state)
 
-- `app/routes/catalog.tsx` — `NO_BRAND = "no-brand"` sentinel group id; `BrandGroupedCatalog` holds a **deselected-id** filter set (new groups visible by default) and is key-reset on `dataGeneration` (catalog.tsx:287). The header holds "Add Figure"; the figure form renders in Sheet/Drawer via `useIsMobile` with a single `open` state — the manager must join this modal arrangement so the two can never be open together.
-- `app/components/FigureForm.tsx` — `brandSelection` is resolved against `brands.has` **at open** (FigureForm.tsx:30) but `handleSave` (FigureForm.tsx:61) trusts a stale `existing` brandId without re-checking — the exact gap CAP-7 closes. A staged `new` brand is committed via `createBrand` at save.
-- `app/components/BrandCombobox.tsx` — built from Popover + Input + listbox (no Command primitive); untouched by this feature beyond reading the live brands map.
-- `app/components/ui/` — `alert-dialog`, `sheet`, `drawer`, `button`, `input`, `popover`, `empty`, and the rest all present; the merge target selector and manager must compose from these (no new dependencies).
+- `app/lib/store.ts` — four `Map`s plus `dataGeneration`; `createBrand(name)` returns the matched-or-minted id or null (trim, brandKey dedup, first-seen casing); `renameBrand` and `deleteBrand` stay exactly as shipped (discriminated results, one `set()` per command). The persistence subscriber writes per-store on map identity change — delete's brands+figures `set()` yields two `writeStore` transactions; `retryPersistence` covers all four stores.
+- `app/lib/migration.ts` — exports `brandKey(name)` (= `name.trim().toLowerCase()`); reuse it, don't duplicate. Known limitation: no Unicode normalization (NFC/NFD "Pokémon" variants count as distinct) — tracked in `../../implementation-artifacts/deferred-work.md`, out of scope here.
+- `app/lib/export-import.ts` — CAP-6 validation shipped: v2 brand collections with blank names or duplicate brandKeys are rejected with the standard invalid-format message; unaffected by merge removal.
+
+## UI (post-revision-1 state)
+
+- `app/components/BrandManager.tsx` — exists; Sheet/Drawer modal opened from the catalog header, mutually exclusive with the figure form by construction; rows live-derived with figure counts, inline rename, delete with destructive AlertDialog stacked over the open manager (deliberate divergence from the figure-delete precedent).
+- `app/components/FigureForm.tsx` — CAP-7 save-guard shipped: `handleSave` re-resolves the selection via `brands.has` (line 62); untouched by merge removal.
+- `app/routes/catalog.tsx` — deselected-id filter set, `dataGeneration` key-reset, `NO_BRAND` sentinel; untouched by merge removal.
+- `app/components/BrandCombobox.tsx` — untouched.
 
 ## Established stances (all verified still current)
 
@@ -22,5 +29,4 @@ Verified against the working tree on 2026-08-28 at commit bdb7375. Where this di
 - Per-store `writeStore` persistence; a multi-store update is multiple transactions — accepted.
 - Full replace wrapped in `startTransition`; no success toasts; AlertDialog for destructive confirmations; import errors shown inline with the dialog open.
 - React Compiler (no manual memoization); minimal `useEffect` — derive during render, key-reset over Effects; Tailwind semantic tokens + `cn()`; alphabetical `localeCompare` ordering precedent (sections, chips, combobox).
-- No new npm dependencies — compose from the existing shadcn primitives.
-- fireEvent-style vitest tests co-located with sources (detailed conventions in `test-expectations.md`).
+- No new npm dependencies; fireEvent-style vitest tests co-located with sources (detailed conventions in `test-expectations.md`).

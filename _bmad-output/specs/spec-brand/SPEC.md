@@ -50,7 +50,7 @@ A pain to solve, with a mandate attached. Figures carry a free-text `franchise` 
 
 ## Non-goals
 
-- Brand management UI: no rename, delete, or merge (create-only lifecycle; a zero-figure brand stays selectable in the combobox and simply has no catalog section). *Superseded 2026-08-28 by `../spec-brand-lifecycle/SPEC.md`, which adds rename/merge/delete and tightens v2 import brand validation.*
+- Brand management UI: no rename, delete, or merge (create-only lifecycle; a zero-figure brand stays selectable in the combobox and simply has no catalog section). *Superseded 2026-08-28 by `../spec-brand-lifecycle/SPEC.md`, which adds rename/delete and tightens v2 import brand validation (it briefly included merge, removed 2026-08-29).*
 - Brand metadata beyond `name` (no color, logo, notes).
 - Brand grouping or filtering outside the catalog — queue, color, and completed views only swap the franchise text for the brand name.
 - Exporting v1 (export always writes v2).

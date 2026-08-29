@@ -143,7 +143,7 @@ describe("BrandManager", () => {
     expect(store.getState().brands).toBe(before)
   })
 
-  it("a rename collision offers the merge dialog; cancelling keeps the typed text", () => {
+  it("rejects a rename collision inline, keeping the typed text and mutating nothing", () => {
     seedTwoBrands()
     render(<BrandManager />)
 
@@ -154,96 +154,64 @@ describe("BrandManager", () => {
     })
     fireEvent.click(screen.getByTestId("brand-rename-save-b-naruto"))
 
-    expect(screen.getByRole("alertdialog")).toBeTruthy()
-    expect(
-      screen.getByText(
-        `Merging "naruto" into "One Piece" moves 2 figures and deletes "naruto".`
-      )
-    ).toBeTruthy()
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
-
     expect(screen.queryByRole("alertdialog")).toBeNull()
-    expect(store.getState().brands).toBe(before)
+    expect(screen.getByTestId("brand-rename-error-b-naruto").textContent).toBe(
+      "This name is already in use."
+    )
     expect(
       (screen.getByTestId("brand-rename-input-b-naruto") as HTMLInputElement)
         .value
     ).toBe("one piece")
+    expect(store.getState().brands).toBe(before)
+    expect(store.getState().brands.get("b-naruto")?.name).toBe("naruto")
   })
 
-  it("confirming a collision merge discards the typed casing and keeps the target name", () => {
+  it("a corrected retype after a collision clears the error and renames", () => {
     seedTwoBrands()
     render(<BrandManager />)
 
     fireEvent.click(screen.getByLabelText("Rename naruto"))
     fireEvent.change(screen.getByTestId("brand-rename-input-b-naruto"), {
-      target: { value: "ONE PIECE" },
+      target: { value: "one piece" },
     })
     fireEvent.click(screen.getByTestId("brand-rename-save-b-naruto"))
-    fireEvent.click(screen.getByRole("button", { name: "Merge" }))
+    expect(screen.getByTestId("brand-rename-error-b-naruto")).toBeTruthy()
 
-    const brands = store.getState().brands
-    expect(brands.size).toBe(1)
-    expect(brands.get("b-op")?.name).toBe("One Piece")
-    expect(store.getState().figures.get("f1")?.brandId).toBe("b-op")
-    expect(store.getState().figures.get("f2")?.brandId).toBe("b-op")
-    expect(screen.queryByRole("alertdialog")).toBeNull()
-    expect(rowTexts()).toHaveLength(1)
-    expect(rowTexts()[0]).toContain("3 figures")
+    fireEvent.change(screen.getByTestId("brand-rename-input-b-naruto"), {
+      target: { value: "Zelda" },
+    })
+    expect(screen.queryByTestId("brand-rename-error-b-naruto")).toBeNull()
+
+    fireEvent.click(screen.getByTestId("brand-rename-save-b-naruto"))
+
+    expect(store.getState().brands.get("b-naruto")?.name).toBe("Zelda")
+    expect(screen.queryByTestId("brand-rename-input-b-naruto")).toBeNull()
   })
 
-  it("explicit merge: the selector excludes the source and the dialog names both brands and the count", () => {
+  it("renders no merge affordance — rows offer only rename and delete", () => {
     seedTwoBrands()
     render(<BrandManager />)
 
-    fireEvent.click(screen.getByTestId("brand-merge-b-naruto"))
-
-    expect(screen.getByTestId("brand-merge-target-b-op")).toBeTruthy()
-    expect(screen.queryByTestId("brand-merge-target-b-naruto")).toBeNull()
-
-    fireEvent.click(screen.getByTestId("brand-merge-target-b-op"))
-
-    expect(
-      screen.getByText(
-        `Merging "naruto" into "One Piece" moves 2 figures and deletes "naruto".`
-      )
-    ).toBeTruthy()
-
-    fireEvent.click(screen.getByRole("button", { name: "Merge" }))
-
-    expect(store.getState().brands.has("b-naruto")).toBe(false)
-    expect(store.getState().figures.get("f1")?.brandId).toBe("b-op")
+    expect(screen.queryAllByTestId(/^brand-merge-/)).toHaveLength(0)
+    expect(screen.getByLabelText("Rename naruto")).toBeTruthy()
+    expect(screen.getByLabelText("Delete naruto")).toBeTruthy()
+    expect(screen.getByLabelText("Rename One Piece")).toBeTruthy()
+    expect(screen.getByLabelText("Delete One Piece")).toBeTruthy()
   })
 
-  it("cancelling the explicit merge dialog mutates nothing", () => {
+  it("confirming a delete whose brand vanished concurrently mutates nothing", () => {
     seedTwoBrands()
     render(<BrandManager />)
 
-    const brands = store.getState().brands
-    const figures = store.getState().figures
-    fireEvent.click(screen.getByTestId("brand-merge-b-naruto"))
-    fireEvent.click(screen.getByTestId("brand-merge-target-b-op"))
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
-
-    expect(screen.queryByRole("alertdialog")).toBeNull()
-    expect(store.getState().brands).toBe(brands)
-    expect(store.getState().figures).toBe(figures)
-  })
-
-  it("confirming a merge whose source vanished concurrently mutates nothing", () => {
-    seedTwoBrands()
-    render(<BrandManager />)
-
-    fireEvent.click(screen.getByTestId("brand-merge-b-naruto"))
-    fireEvent.click(screen.getByTestId("brand-merge-target-b-op"))
+    fireEvent.click(screen.getByLabelText("Delete naruto"))
     expect(screen.getByRole("alertdialog")).toBeTruthy()
 
-    // The source disappears underneath the open dialog
+    // The brand disappears underneath the open dialog
     act(() => {
       store.getState().deleteBrand("b-naruto")
     })
 
-    // Still open, but its brands no longer resolve — no literal "undefined"
+    // Still open, but its brand no longer resolves — no literal "undefined"
     expect(screen.getByRole("alertdialog").textContent).not.toContain(
       "undefined"
     )
@@ -251,23 +219,11 @@ describe("BrandManager", () => {
     const brands = store.getState().brands
     const figures = store.getState().figures
 
-    fireEvent.click(screen.getByRole("button", { name: "Merge" }))
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
 
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(store.getState().brands).toBe(brands)
     expect(store.getState().figures).toBe(figures)
-    expect(store.getState().brands.has("b-naruto")).toBe(false)
-  })
-
-  it("disables merge when the store holds a lone brand", () => {
-    const lone = createBrand({ id: "b-lone", name: "Lonely" })
-    store.setState({ brands: new Map([[lone.id, lone]]) })
-
-    render(<BrandManager />)
-
-    expect(
-      (screen.getByTestId("brand-merge-b-lone") as HTMLButtonElement).disabled
-    ).toBe(true)
   })
 
   it("delete states the referenced-figure count and that figures are kept", () => {

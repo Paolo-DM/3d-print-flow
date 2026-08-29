@@ -13,13 +13,8 @@ import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 export type RenameBrandResult =
   | { type: "renamed" }
   | { type: "unchanged" }
-  | { type: "collision"; existingId: string }
+  | { type: "collision" }
   | { type: "invalid" }
-  | { type: "not-found" }
-
-export type MergeBrandsResult =
-  | { type: "merged"; movedFigureCount: number }
-  | { type: "same-brand" }
   | { type: "not-found" }
 
 export type DeleteBrandResult =
@@ -57,11 +52,6 @@ interface PrintFlowState {
    * is the trimmed name written.
    */
   renameBrand: (id: string, name: string) => RenameBrandResult
-  /**
-   * Move every figure of `sourceId` to `targetId` and drop the source brand,
-   * both maps in one `set()`. Checked in order: same brand, missing brand.
-   */
-  mergeBrands: (sourceId: string, targetId: string) => MergeBrandsResult
   /**
    * Remove a brand and null the `brandId` of every figure referencing it
    * (cascade-to-null, not reference blocking), both maps in one `set()`.
@@ -124,7 +114,7 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     const key = brandKey(trimmed)
     for (const brand of brands.values()) {
       if (brand.id !== id && brandKey(brand.name) === key) {
-        return { type: "collision", existingId: brand.id }
+        return { type: "collision" }
       }
     }
 
@@ -132,29 +122,6 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     next.set(id, { ...existing, name: trimmed })
     set({ brands: next })
     return { type: "renamed" }
-  },
-
-  mergeBrands(sourceId, targetId) {
-    if (sourceId === targetId) return { type: "same-brand" }
-    const { brands, figures } = get()
-    if (!brands.has(sourceId) || !brands.has(targetId)) {
-      return { type: "not-found" }
-    }
-
-    const nextBrands = new Map(brands)
-    nextBrands.delete(sourceId)
-    const nextFigures = new Map(figures)
-    let movedFigureCount = 0
-    for (const [figureId, figure] of figures) {
-      // Strict id equality — a figure pointing at no live brand is left alone.
-      if (figure.brandId === sourceId) {
-        nextFigures.set(figureId, { ...figure, brandId: targetId })
-        movedFigureCount += 1
-      }
-    }
-
-    set({ brands: nextBrands, figures: nextFigures })
-    return { type: "merged", movedFigureCount }
   },
 
   deleteBrand(id) {

@@ -67,7 +67,7 @@
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
   summary: Focus is not returned to the row's Rename button after an inline rename is saved or cancelled in the brand manager.
-  evidence: The autoFocused input unmounts with no focus target named, so inside the Sheet/Drawer focus falls to the container and a keyboard user's next Tab restarts from the top of the modal; confirming a merge or delete removes the row entirely with the same effect. Not required by ui-flows.md, and a correct fix needs per-row refs, so it is more than a trivial patch.
+  evidence: The autoFocused input unmounts with no focus target named, so inside the Sheet/Drawer focus falls to the container and a keyboard user's next Tab restarts from the top of the modal; confirming a delete removes the row entirely with the same effect. Not required by ui-flows.md, and a correct fix needs per-row refs, so it is more than a trivial patch.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
   summary: The alphabetical `a.name.localeCompare(b.name)` comparator is now inlined in three places — catalog.tsx, BrandCombobox.tsx, and BrandManager.tsx — which ui-flows.md requires to stay identical.

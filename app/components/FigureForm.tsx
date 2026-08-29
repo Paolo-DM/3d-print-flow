@@ -56,9 +56,8 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
   function resolveBrandId(): string | null {
     switch (brandSelection.kind) {
       case "existing":
-        // Re-resolved against the live brands map: a brand deleted or merged
-        // away since the form opened saves as null rather than as an orphan
-        // reference (and null wins over a merge's rewiring).
+        // Re-resolved against the live brands map: a brand deleted since the
+        // form opened saves as null rather than as an orphan reference.
         return brands.has(brandSelection.brandId)
           ? brandSelection.brandId
           : null

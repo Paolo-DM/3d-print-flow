@@ -393,31 +393,6 @@ describe("FigureForm", () => {
     expect(figures[0].brandId).toBeNull()
   })
 
-  it("saves null — not the merge target — when the selected brand is merged away", () => {
-    const source = createBrand({ id: "b1", name: "naruto" })
-    const target = createBrand({ id: "b2", name: "Naruto Shippuden" })
-    const figure = createFigure({ id: "fig-1", name: "Kakashi", brandId: "b1" })
-    store.setState({
-      brands: new Map([
-        [source.id, source],
-        [target.id, target],
-      ]),
-      figures: new Map([[figure.id, figure]]),
-    })
-
-    renderForm({ figure })
-
-    act(() => {
-      store.getState().mergeBrands("b1", "b2")
-    })
-    // The merge rewired the stored figure; the open form still overrides to null
-    expect(store.getState().figures.get("fig-1")?.brandId).toBe("b2")
-
-    fireEvent.click(screen.getByRole("button", { name: "Save" }))
-
-    expect(store.getState().figures.get("fig-1")?.brandId).toBeNull()
-  })
-
   it("shows the affected queue item warning in edit mode", () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({
