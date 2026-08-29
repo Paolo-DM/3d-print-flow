@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Shapes } from "lucide-react"
+import { Check, Shapes } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
 import { computeAffectedQueueItems } from "~/lib/derived"
@@ -146,13 +146,21 @@ function BrandGroupedCatalog({
               aria-pressed={selected}
               onClick={() => toggleGroup(group.id)}
               className={cn(
-                "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
                 selected
-                  ? "border-transparent bg-accent text-accent-foreground"
-                  : "border-border bg-card text-muted-foreground"
+                  ? "border-primary bg-accent text-accent-foreground"
+                  : "border-foreground/50 bg-card text-muted-foreground dark:border-foreground/45"
               )}
               data-testid={`brand-filter-${group.id}`}
             >
+              {/* Always rendered so toggling never reflows the wrapped row */}
+              <Check
+                className={cn(
+                  "size-3.5 shrink-0",
+                  selected ? "opacity-100" : "opacity-0"
+                )}
+                aria-hidden="true"
+              />
               {group.name}
             </button>
           )

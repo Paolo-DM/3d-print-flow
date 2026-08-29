@@ -168,7 +168,7 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
                       className={cn(
                         "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
                         isSelected
-                          ? "border-transparent bg-accent"
+                          ? "border-primary bg-accent"
                           : "border-border bg-card"
                       )}
                       data-testid={`spool-toggle-${spool.id}`}
