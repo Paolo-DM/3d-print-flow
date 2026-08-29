@@ -201,6 +201,8 @@ describe("FigureCard", () => {
   it("Add to Queue Stock dispatches addToQueue with stock type", () => {
     const spool = createSpool({ id: "s1" })
     const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
+    // the store command guards against unknown figures
+    store.setState({ figures: new Map([[figure.id, figure]]) })
     render(
       <FigureCard
         figure={figure}
@@ -222,6 +224,8 @@ describe("FigureCard", () => {
   it("Add to Queue Order dispatches addToQueue with order type", () => {
     const spool = createSpool({ id: "s1" })
     const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
+    // the store command guards against unknown figures
+    store.setState({ figures: new Map([[figure.id, figure]]) })
     render(
       <FigureCard
         figure={figure}
@@ -237,5 +241,25 @@ describe("FigureCard", () => {
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(1)
     expect(items[0].type).toBe("order")
+  })
+
+  it("a rejected add leaves the queue empty and never flashes Added!", () => {
+    const spool = createSpool({ id: "s1" })
+    // figure NOT seeded in the store — the command answers rejected
+    const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
+    render(
+      <FigureCard
+        figure={figure}
+        brands={brands}
+        spools={new Map([["s1", spool]])}
+      />
+    )
+
+    const trigger = screen.getByRole("button", { name: "Add Naruto to queue" })
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
+    fireEvent.click(screen.getByText("Stock"))
+
+    expect(store.getState().queueItems.size).toBe(0)
+    expect(screen.queryByText("Added!")).toBeNull()
   })
 })

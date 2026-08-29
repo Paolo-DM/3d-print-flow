@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { Check, Shapes } from "lucide-react"
+import { toast } from "sonner"
 
-import { usePrintFlowStore } from "~/lib/store"
+import { MAX_QUEUE_QUANTITY, usePrintFlowStore } from "~/lib/store"
 import { computeAffectedQueueItems } from "~/lib/derived"
 import type { Brand, Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
@@ -100,12 +101,18 @@ function BrandGroupedCatalog({
   spools,
   onEdit,
   onDelete,
+  orderMode,
+  orderSelection,
+  onOrderQuantityChange,
 }: {
   figures: Figure[]
   brands: Map<string, Brand>
   spools: Map<string, Spool>
   onEdit: (figure: Figure) => void
   onDelete: (figure: Figure) => void
+  orderMode: boolean
+  orderSelection: ReadonlyMap<string, number>
+  onOrderQuantityChange: (figureId: string, quantity: number) => void
 }) {
   // Deselected-id set: groups appearing later (inline create, import) are
   // visible by default. The whole component is key-reset on import.
@@ -199,6 +206,9 @@ function BrandGroupedCatalog({
                     spools={spools}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    orderMode={orderMode}
+                    orderQuantity={orderSelection.get(figure.id) ?? 0}
+                    onOrderQuantityChange={onOrderQuantityChange}
                   />
                 ))}
               </div>
@@ -216,9 +226,18 @@ export default function FigureCatalog() {
   const spools = usePrintFlowStore((s) => s.spools)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const deleteFigure = usePrintFlowStore((s) => s.deleteFigure)
+  const addBatchToQueue = usePrintFlowStore((s) => s.addBatchToQueue)
   const dataGeneration = usePrintFlowStore((s) => s.dataGeneration)
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
+
+  // Order mode (CAP-5): per-figure quantities staged locally, committed as one
+  // batch. Stock/order is chosen once for the whole batch, defaulting to order.
+  const [orderMode, setOrderMode] = useState(false)
+  const [orderSelection, setOrderSelection] = useState<
+    ReadonlyMap<string, number>
+  >(new Map())
+  const [batchType, setBatchType] = useState<"stock" | "order">("order")
 
   // Closing leaves `modal` intact so the exit animation keeps its content.
   const [open, setOpen] = useState(false)
@@ -287,6 +306,89 @@ export default function FigureCatalog() {
     }
   }
 
+  // Staged figures can be deleted (or replaced by an import) after selection —
+  // derive the effective selection during render so the summary and the
+  // confirm payload never count phantom pieces.
+  const effectiveSelection = new Map(
+    [...orderSelection].filter(([figureId]) => figures.has(figureId))
+  )
+  const selectedFigureCount = effectiveSelection.size
+  const selectedPieceCount = [...effectiveSelection.values()].reduce(
+    (sum, qty) => sum + qty,
+    0
+  )
+
+  function exitOrderMode() {
+    // Cancel/exit clears selection and resets the batch type default.
+    setOrderMode(false)
+    setOrderSelection(new Map())
+    setBatchType("order")
+  }
+
+  function handleToggleOrderMode() {
+    if (orderMode) {
+      exitOrderMode()
+    } else {
+      setOrderMode(true)
+    }
+  }
+
+  function handleOrderQuantityChange(figureId: string, quantity: number) {
+    setOrderSelection((prev) => {
+      const next = new Map(prev)
+      if (quantity <= 0) {
+        next.delete(figureId)
+      } else {
+        next.set(figureId, Math.min(quantity, MAX_QUEUE_QUANTITY))
+      }
+      return next
+    })
+  }
+
+  function handleConfirmOrder() {
+    const entries = [...effectiveSelection.entries()].map(
+      ([figureId, quantity]) => ({ figureId, quantity })
+    )
+    // Staged figures that no longer exist were filtered from the payload —
+    // count them as skipped so the toast stays honest about the order.
+    const staleSkippedCount = orderSelection.size - effectiveSelection.size
+    const result = addBatchToQueue(entries, batchType)
+    switch (result.type) {
+      case "queued": {
+        const skippedCount = result.skipped.length + staleSkippedCount
+        const skippedLabel = `${skippedCount} figure${
+          skippedCount === 1 ? "" : "s"
+        } skipped`
+        if (result.created === 0 && result.merged === 0) {
+          toast.warning(`Nothing queued · ${skippedLabel}`)
+          break
+        }
+        const parts = [
+          `${result.pieces} piece${result.pieces === 1 ? "" : "s"} queued`,
+        ]
+        if (result.merged > 0) {
+          parts.push(
+            `${result.merged} merged into existing ${
+              result.merged === 1 ? "entry" : "entries"
+            }`
+          )
+        }
+        if (skippedCount > 0) {
+          parts.push(skippedLabel)
+        }
+        toast.success(parts.join(" · "))
+        break
+      }
+      case "empty":
+        break
+      default: {
+        const exhaustive: never = result
+        return exhaustive
+      }
+    }
+    exitOrderMode()
+  }
+
   // key-reset (not an Effect) drops transient state on a data replace and on
   // every reopen of the shared modal shell
   const modalContent =
@@ -306,6 +408,16 @@ export default function FigureCatalog() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Figure Catalog</h1>
         <div className="flex items-center gap-2">
+          {figureList.length > 0 ? (
+            <Button
+              variant={orderMode ? "secondary" : "outline"}
+              aria-pressed={orderMode}
+              onClick={handleToggleOrderMode}
+              data-testid="order-mode-toggle"
+            >
+              {orderMode ? "Exit order mode" : "Add order"}
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={handleManageBrands}>
             Manage brands
           </Button>
@@ -335,8 +447,54 @@ export default function FigureCatalog() {
           spools={spools}
           onEdit={handleEditFigure}
           onDelete={handleDeleteFigure}
+          orderMode={orderMode}
+          orderSelection={effectiveSelection}
+          onOrderQuantityChange={handleOrderQuantityChange}
         />
       )}
+
+      {orderMode ? (
+        <div
+          className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-popover/95 p-3 shadow-lg supports-backdrop-filter:bg-popover/90 supports-backdrop-filter:backdrop-blur-xs"
+          data-testid="order-summary-bar"
+        >
+          <span className="text-sm font-medium tabular-nums">
+            {selectedFigureCount} figure{selectedFigureCount === 1 ? "" : "s"} ·{" "}
+            {selectedPieceCount} piece{selectedPieceCount === 1 ? "" : "s"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex items-center gap-1"
+              role="group"
+              aria-label="Queue as"
+            >
+              <Button
+                variant={batchType === "stock" ? "secondary" : "ghost"}
+                aria-pressed={batchType === "stock"}
+                onClick={() => setBatchType("stock")}
+              >
+                Stock
+              </Button>
+              <Button
+                variant={batchType === "order" ? "secondary" : "ghost"}
+                aria-pressed={batchType === "order"}
+                onClick={() => setBatchType("order")}
+              >
+                Order
+              </Button>
+            </div>
+            <Button variant="outline" onClick={exitOrderMode}>
+              Cancel
+            </Button>
+            <Button
+              disabled={selectedFigureCount === 0}
+              onClick={handleConfirmOrder}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>

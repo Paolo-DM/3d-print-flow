@@ -34,7 +34,8 @@ export function createQueueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     id: crypto.randomUUID(),
     figureId: crypto.randomUUID(),
     type: "stock",
-    completedColors: [],
+    quantity: 1,
+    completedCounts: {},
     completedAt: null,
     ...overrides,
   }

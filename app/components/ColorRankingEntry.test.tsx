@@ -60,7 +60,7 @@ describe("ColorRankingEntry", () => {
       id: "f1",
       requiredColors: ["s-white", "s-red"],
     })
-    const qi = createQueueItem({ figureId: "f1", completedColors: [] })
+    const qi = createQueueItem({ figureId: "f1", completedCounts: {} })
 
     render(
       <ColorRankingEntry
@@ -87,7 +87,7 @@ describe("ColorRankingEntry", () => {
       brandId: "b1",
       requiredColors: ["s-white"],
     })
-    const qi = createQueueItem({ figureId: "f1", completedColors: [] })
+    const qi = createQueueItem({ figureId: "f1", completedCounts: {} })
 
     render(
       <ColorRankingEntry
@@ -121,12 +121,12 @@ describe("ColorRankingEntry", () => {
     const stockQi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -175,10 +175,10 @@ describe("ColorRankingEntry", () => {
       name: "Complete",
       requiredColors: ["s-white"],
     })
-    const qi1 = createQueueItem({ figureId: "f1", completedColors: [] })
+    const qi1 = createQueueItem({ figureId: "f1", completedCounts: {} })
     const qi2 = createQueueItem({
       figureId: "f2",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
     })
 
     render(
@@ -215,7 +215,7 @@ describe("ColorRankingEntry", () => {
     const qi = createQueueItem({
       figureId: "f1",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -248,12 +248,12 @@ describe("ColorRankingEntry", () => {
     const stockQi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -297,12 +297,12 @@ describe("ColorRankingEntry", () => {
     const qi1 = createQueueItem({
       figureId: "f1",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
     const qi2 = createQueueItem({
       figureId: "f2",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -346,12 +346,12 @@ describe("ColorRankingEntry", () => {
     const qi1 = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
     const qi2 = createQueueItem({
       figureId: "f2",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -390,7 +390,7 @@ describe("ColorRankingEntry", () => {
     const qi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -412,7 +412,7 @@ describe("ColorRankingEntry", () => {
   it("renders rank position with tabular-nums", () => {
     const entry = makeEntry()
     const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
-    const qi = createQueueItem({ figureId: "f1", completedColors: [] })
+    const qi = createQueueItem({ figureId: "f1", completedCounts: {} })
 
     render(
       <ColorRankingEntry
@@ -438,7 +438,7 @@ describe("ColorRankingEntry", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
     const entry = makeEntry({ count: 1 })
 
@@ -464,9 +464,9 @@ describe("ColorRankingEntry", () => {
     const pendingChip = screen.getByLabelText("Mark White PLA as printed")
     fireEvent.click(pendingChip)
 
-    expect(store.getState().queueItems.get("q1")?.completedColors).toContain(
-      "s-white"
-    )
+    expect(
+      store.getState().queueItems.get("q1")?.completedCounts["s-white"]
+    ).toBe(1)
   })
 
   it("un-toggles chip when completed ColorChip is clicked", () => {
@@ -477,7 +477,7 @@ describe("ColorRankingEntry", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-red"],
+      completedCounts: { "s-red": 1 },
     })
     const entry = makeEntry({ count: 1 })
 
@@ -504,7 +504,96 @@ describe("ColorRankingEntry", () => {
     fireEvent.click(completedChip)
 
     expect(
-      store.getState().queueItems.get("q1")?.completedColors
-    ).not.toContain("s-red")
+      store.getState().queueItems.get("q1")?.completedCounts["s-red"]
+    ).toBe(0)
+  })
+
+  it("keeps a row visible while copies of the current color are outstanding", () => {
+    const entry = makeEntry({ count: 1 })
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-white": 1 },
+    })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        brands={brands}
+        queueItems={new Map([[qi.id, qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.getByText("Kratos")).toBeTruthy()
+    // per-spool count on the chip plus the progress fraction, both as text
+    expect(screen.getAllByText("1/2").length).toBeGreaterThan(0)
+  })
+
+  it("hides a row once the current color reached quantity on that entry", () => {
+    const entry = makeEntry({ count: 1 })
+    const figure = createFigure({
+      id: "f1",
+      name: "Done",
+      requiredColors: ["s-white", "s-red"],
+    })
+    const qi = createQueueItem({
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-white": 2 },
+    })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        brands={brands}
+        queueItems={new Map([[qi.id, qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.queryByText("Done")).toBeNull()
+  })
+
+  it("shows a ×N badge on multi-copy rows", () => {
+    const entry = makeEntry({ count: 2 })
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: {},
+    })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([["f1", figure]])}
+        brands={brands}
+        queueItems={new Map([[qi.id, qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.getByTestId("quantity-badge").textContent).toBe("×2")
   })
 })

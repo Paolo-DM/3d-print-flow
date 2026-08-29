@@ -3,7 +3,15 @@ import "fake-indexeddb/auto"
 
 import { createRoutesStub } from "react-router"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 import { fromJSON, store, toJSON } from "~/lib/store"
 import {
@@ -814,5 +822,277 @@ describe("brand manager from the catalog", () => {
         value: originalInnerWidth,
       })
     }
+  })
+})
+
+describe("catalog order mode", () => {
+  function seedCatalog() {
+    const spool = createSpool({ id: "s1", name: "Green" })
+    const buzz = createFigure({
+      id: "fig-buzz",
+      name: "Buzz",
+      requiredColors: ["s1"],
+    })
+    const woody = createFigure({
+      id: "fig-woody",
+      name: "Woody",
+      requiredColors: ["s1"],
+    })
+    const colorless = createFigure({
+      id: "fig-colorless",
+      name: "Empty",
+      requiredColors: [],
+    })
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([
+        ["fig-buzz", buzz],
+        ["fig-woody", woody],
+        ["fig-colorless", colorless],
+      ]),
+    })
+  }
+
+  it("the toggle opens order mode with a summary bar defaulting to order", () => {
+    seedCatalog()
+    renderCatalog()
+
+    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+
+    const bar = screen.getByTestId("order-summary-bar")
+    expect(bar.textContent).toContain("0 figures · 0 pieces")
+    const orderChoice = screen.getByRole("button", {
+      name: "Order",
+    }) as HTMLButtonElement
+    expect(orderChoice.getAttribute("aria-pressed")).toBe("true")
+    const confirm = screen.getByRole("button", {
+      name: "Confirm",
+    }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+  })
+
+  it("selecting cards and adjusting quantities updates the summary", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "2 figures · 3 pieces"
+    )
+
+    // − at 1 deselects the figure
+    fireEvent.click(screen.getByLabelText("Decrease order quantity of Woody"))
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "1 figure · 2 pieces"
+    )
+  })
+
+  it("figures with no required colors stay unselectable", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+
+    const add = screen.getByLabelText("Add Empty to order") as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+  })
+
+  it("confirm queues the whole batch in one store update and exits order mode", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+      expect(notifications).toBe(1)
+    } finally {
+      unsubscribe()
+    }
+
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(2)
+    expect(items.every((qi) => qi.type === "order")).toBe(true)
+    expect(items.find((qi) => qi.figureId === "fig-buzz")?.quantity).toBe(2)
+    expect(items.find((qi) => qi.figureId === "fig-woody")?.quantity).toBe(1)
+
+    // order mode exited, selection cleared
+    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "0 figures · 0 pieces"
+    )
+  })
+
+  it("stock choice queues the batch as stock", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByRole("button", { name: "Stock" }))
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(1)
+    expect(items[0].type).toBe("stock")
+  })
+
+  it("cancel exits order mode and clears the selection", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
+    expect(store.getState().queueItems.size).toBe(0)
+
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "0 figures · 0 pieces"
+    )
+  })
+
+  it("bulk-add merges into an existing active entry per CAP-6", () => {
+    seedCatalog()
+    const existing = createQueueItem({
+      id: "q-existing",
+      figureId: "fig-buzz",
+      type: "order",
+      quantity: 1,
+    })
+    store.setState({ queueItems: new Map([["q-existing", existing]]) })
+
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+
+    expect(store.getState().queueItems.size).toBe(1)
+    expect(store.getState().queueItems.get("q-existing")?.quantity).toBe(3)
+  })
+
+  it("tapping a card selects it at ×1; tapping a selected card leaves its quantity alone", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+
+    const buzzCard = screen
+      .getByText("Buzz")
+      .closest('[data-testid="figure-card"]')!
+    fireEvent.click(buzzCard)
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "1 figure · 1 piece"
+    )
+
+    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×2")
+
+    // the !selected guard: a second card tap must not change the quantity
+    fireEvent.click(buzzCard)
+    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×2")
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "1 figure · 2 pieces"
+    )
+  })
+
+  it("the order-mode + button is disabled at 99", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+
+    const plus = screen.getByLabelText(
+      "Increase order quantity of Buzz"
+    ) as HTMLButtonElement
+    for (let i = 0; i < 98; i++) {
+      fireEvent.click(plus)
+    }
+
+    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×99")
+    expect(plus.disabled).toBe(true)
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "1 figure · 99 pieces"
+    )
+  })
+
+  it("confirm presents the piece total as a success toast", async () => {
+    const { toast } = await import("sonner")
+    const successSpy = vi.spyOn(toast, "success")
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+
+    expect(successSpy).toHaveBeenCalledWith("3 pieces queued")
+    successSpy.mockRestore()
+  })
+
+  it("a figure deleted after staging is dropped from the batch and reported as skipped", async () => {
+    const { toast } = await import("sonner")
+    const successSpy = vi.spyOn(toast, "success")
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+
+    act(() => {
+      store.getState().deleteFigure("fig-woody")
+    })
+
+    // the summary stops counting the phantom before confirm
+    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
+      "1 figure · 1 piece"
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+
+    expect(successSpy).toHaveBeenCalledWith("1 piece queued · 1 figure skipped")
+    const items = [...store.getState().queueItems.values()]
+    expect(items).toHaveLength(1)
+    expect(items[0].figureId).toBe("fig-buzz")
+    successSpy.mockRestore()
+  })
+
+  it("a confirmed batch that applied nothing uses a non-success toast", async () => {
+    const { toast } = await import("sonner")
+    const successSpy = vi.spyOn(toast, "success")
+    const warningSpy = vi.spyOn(toast, "warning")
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+
+    // the figure still exists but loses its colors after staging — the store
+    // skips it, so nothing lands
+    act(() => {
+      store.getState().updateFigure("fig-buzz", { requiredColors: [] })
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+
+    expect(successSpy).not.toHaveBeenCalled()
+    expect(warningSpy).toHaveBeenCalledWith("Nothing queued · 1 figure skipped")
+    expect(store.getState().queueItems.size).toBe(0)
+    successSpy.mockRestore()
+    warningSpy.mockRestore()
   })
 })

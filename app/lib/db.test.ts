@@ -236,7 +236,7 @@ describe("replaceAll", () => {
 describe("schema upgrade", () => {
   it("fresh install atomically hydrates the exact starter catalog", async () => {
     const data = await hydrate()
-    const db = await openDB("print-flow", 2)
+    const db = await openDB("print-flow", 3)
 
     expect([...db.objectStoreNames].sort()).toEqual([
       "brands",
@@ -263,23 +263,129 @@ describe("schema upgrade", () => {
     const spool = createSpool({ id: "custom-spool" })
     const brand = createBrand({ id: "custom-brand" })
     const figure = createFigure({ id: "custom-figure", brandId: brand.id })
-    const queueItem = createQueueItem({
+    const legacyQueueItem = {
       id: "custom-queue-item",
       figureId: figure.id,
-    })
+      type: "stock",
+      completedColors: [],
+      completedAt: null,
+    }
     await seedV2Database({
       spools: [spool],
       brands: [brand],
       figures: [figure],
-      queueItems: [queueItem],
+      queueItems: [legacyQueueItem],
     })
 
     expect(await hydrate()).toEqual({
       spools: { [spool.id]: spool },
       brands: { [brand.id]: brand },
       figures: { [figure.id]: figure },
-      queueItems: { [queueItem.id]: queueItem },
+      queueItems: {
+        [legacyQueueItem.id]: {
+          id: legacyQueueItem.id,
+          figureId: figure.id,
+          type: "stock",
+          quantity: 1,
+          completedCounts: {},
+          completedAt: null,
+        },
+      },
     })
+  })
+
+  it("migrates v2 queue rows to v3: quantity 1, counts of 1, completedAt verbatim", async () => {
+    await seedV2Database({
+      queueItems: [
+        {
+          id: "q1",
+          figureId: "f1",
+          type: "order",
+          completedColors: ["s1", "s2"],
+          completedAt: "2026-08-12T13:16:46.541Z",
+        },
+        {
+          id: "q2",
+          figureId: "f1",
+          type: "stock",
+          completedColors: [],
+          // completedAt absent — legacy rows may omit it
+        },
+      ],
+    })
+
+    const data = await hydrate()
+
+    expect(data.queueItems).toEqual({
+      q1: {
+        id: "q1",
+        figureId: "f1",
+        type: "order",
+        quantity: 1,
+        completedCounts: { s1: 1, s2: 1 },
+        completedAt: "2026-08-12T13:16:46.541Z",
+      },
+      q2: {
+        id: "q2",
+        figureId: "f1",
+        type: "stock",
+        quantity: 1,
+        completedCounts: {},
+        completedAt: null,
+      },
+    })
+  })
+
+  it("deletes v2 queue rows that fail the legacy guard during the upgrade", async () => {
+    await seedV2Database({
+      queueItems: [
+        {
+          id: "q-good",
+          figureId: "f1",
+          type: "stock",
+          completedColors: [],
+          completedAt: null,
+        },
+        {
+          id: "q-bad",
+          figureId: "f1",
+          type: "stock",
+          completedColors: "not-an-array",
+          completedAt: null,
+        },
+      ],
+    })
+
+    const data = await hydrate()
+
+    expect(Object.keys(data.queueItems)).toEqual(["q-good"])
+  })
+
+  it("preserves duplicate active rows one-for-one, never consolidating", async () => {
+    await seedV2Database({
+      queueItems: [
+        {
+          id: "q-dup-a",
+          figureId: "f1",
+          type: "order",
+          completedColors: [],
+          completedAt: null,
+        },
+        {
+          id: "q-dup-b",
+          figureId: "f1",
+          type: "order",
+          completedColors: [],
+          completedAt: null,
+        },
+      ],
+    })
+
+    const data = await hydrate()
+
+    expect(Object.keys(data.queueItems).sort()).toEqual(["q-dup-a", "q-dup-b"])
+    expect(data.queueItems["q-dup-a"].quantity).toBe(1)
+    expect(data.queueItems["q-dup-b"].quantity).toBe(1)
   })
 
   it("migrates a v1 database: derives brands, rewires figures, drops franchise", async () => {
@@ -343,14 +449,14 @@ describe("schema upgrade", () => {
     expectStarterCatalog(data)
   })
 
-  it("leaves spools and queue items untouched during migration", async () => {
+  it("v1 upgrade applies figure/brand migration and queue mapping in one upgrade", async () => {
     const spool = { id: "s1", name: "Red PLA", hex: "#FF0000" }
     const queueItem = {
       id: "q1",
       figureId: "a",
       type: "stock",
-      completedColors: [],
-      completedAt: null,
+      completedColors: ["s1"],
+      completedAt: "2026-04-01T08:26:13.501Z",
     }
     await seedV1Database({
       spools: [spool],
@@ -360,8 +466,21 @@ describe("schema upgrade", () => {
 
     const data = await hydrate()
 
+    // figure/brand migration ran
+    expect(Object.values(data.brands).map((b) => b.name)).toEqual(["Naruto"])
+    expect("franchise" in data.figures.a).toBe(false)
+    // spools untouched; queue rows mapped to v3 with completedAt verbatim
     expect(data.spools).toEqual({ s1: spool })
-    expect(data.queueItems).toEqual({ q1: queueItem })
+    expect(data.queueItems).toEqual({
+      q1: {
+        id: "q1",
+        figureId: "a",
+        type: "stock",
+        quantity: 1,
+        completedCounts: { s1: 1 },
+        completedAt: "2026-04-01T08:26:13.501Z",
+      },
+    })
   })
 
   it("is idempotent: reopening an already-migrated database changes nothing", async () => {
@@ -380,20 +499,20 @@ describe("schema upgrade", () => {
 
 describe("connection lifecycle", () => {
   it("closes its cached connection when a newer version opens elsewhere (blocking handler)", async () => {
-    await hydrate() // caches an open version-2 connection
+    await hydrate() // caches an open version-3 connection
 
     // Without our blocking handler closing the cached connection, this
-    // version-3 open would stall until the test times out.
-    const newer = await openDB("print-flow", 3, { upgrade() {} })
+    // version-4 open would stall until the test times out.
+    const newer = await openDB("print-flow", 4, { upgrade() {} })
 
-    expect(newer.version).toBe(3)
+    expect(newer.version).toBe(4)
     newer.close()
   })
 
   it("does not cache a failed open: a later attempt reopens fresh", async () => {
-    // A database already at version 3 makes our version-2 open reject
+    // A database already at version 4 makes our version-3 open reject
     // with VersionError.
-    const newer = await openDB("print-flow", 3, { upgrade() {} })
+    const newer = await openDB("print-flow", 4, { upgrade() {} })
     newer.close()
 
     await expect(hydrate()).rejects.toThrow()

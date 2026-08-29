@@ -502,7 +502,7 @@ describe("FigureForm", () => {
     const queueItem = createQueueItem({
       id: "q1",
       figureId: figure.id,
-      completedColors: [red.id, blue.id],
+      completedCounts: { [red.id]: 1, [blue.id]: 1 },
     })
     const queueItems = new Map([[queueItem.id, queueItem]])
 
@@ -531,8 +531,8 @@ describe("FigureForm", () => {
     expect(store.getState().queueItems).toBe(queueItems)
     expect(store.getState().queueItems.get(queueItem.id)).toEqual(queueItem)
     expect(
-      store.getState().queueItems.get(queueItem.id)?.completedColors
-    ).toEqual([red.id, blue.id])
+      store.getState().queueItems.get(queueItem.id)?.completedCounts
+    ).toEqual({ [red.id]: 1, [blue.id]: 1 })
   })
 
   it("cancel calls onCancel without mutating store", () => {

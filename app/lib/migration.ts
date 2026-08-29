@@ -1,4 +1,4 @@
-import type { Brand, Figure } from "~/lib/types"
+import type { Brand, Figure, QueueItem } from "~/lib/types"
 
 /** Legacy figure shape from schema v1 (free-text franchise). */
 export interface FigureV1 {
@@ -8,6 +8,19 @@ export interface FigureV1 {
   size: number
   notes: string
   requiredColors: string[]
+}
+
+/**
+ * Legacy queue-item shape from schema v1/v2 (one row = one physical copy,
+ * completed colors as a set). Used only by legacy envelopes and the IDB
+ * migration guard, so those paths don't silently inherit the v3 shape.
+ */
+export interface QueueItemLegacy {
+  id: string
+  figureId: string
+  type: "stock" | "order"
+  completedColors: string[]
+  completedAt?: string | null
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +38,51 @@ export function isValidFigureV1(value: unknown): value is FigureV1 {
     Array.isArray(value.requiredColors) &&
     value.requiredColors.every((c: unknown) => typeof c === "string")
   )
+}
+
+export function isValidQueueItemLegacy(
+  value: unknown
+): value is QueueItemLegacy {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.id === "string" &&
+    typeof value.figureId === "string" &&
+    (value.type === "stock" || value.type === "order") &&
+    Array.isArray(value.completedColors) &&
+    value.completedColors.every((c: unknown) => typeof c === "string") &&
+    (!("completedAt" in value) ||
+      typeof value.completedAt === "string" ||
+      value.completedAt === null)
+  )
+}
+
+/**
+ * Single legacy→v3 mapping shared by the IDB live migration and the v1/v2
+ * import paths: quantity 1, each completed color becomes a count of 1, and
+ * `completedAt` is preserved verbatim (never re-derived here — the canonical
+ * rule self-heals mismatches on the next mutation).
+ */
+export function migrateLegacyQueueItem(item: QueueItemLegacy): QueueItem {
+  return {
+    id: item.id,
+    figureId: item.figureId,
+    type: item.type,
+    quantity: 1,
+    completedCounts: Object.fromEntries(
+      item.completedColors.map((spoolId) => [spoolId, 1])
+    ),
+    completedAt: item.completedAt ?? null,
+  }
+}
+
+export function migrateLegacyQueueItems(
+  queueItems: Record<string, QueueItemLegacy>
+): Record<string, QueueItem> {
+  const result: Record<string, QueueItem> = {}
+  for (const [id, item] of Object.entries(queueItems)) {
+    result[id] = migrateLegacyQueueItem(item)
+  }
+  return result
 }
 
 /** Dedup key for brand names: case-insensitive match on the trimmed name. */

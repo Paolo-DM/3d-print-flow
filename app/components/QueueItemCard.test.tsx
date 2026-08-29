@@ -55,7 +55,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -77,7 +77,7 @@ describe("QueueItemCard", () => {
       id: "q1",
       figureId: "f1",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -98,7 +98,7 @@ describe("QueueItemCard", () => {
       id: "q1",
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -121,7 +121,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-red"],
+      completedCounts: { "s-red": 1 },
     })
 
     render(
@@ -147,7 +147,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-red"],
+      completedCounts: { "s-red": 1 },
     })
 
     render(
@@ -167,7 +167,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -191,7 +191,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
     const toggleChip = vi.fn()
 
@@ -224,7 +224,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -248,7 +248,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
     })
 
     render(
@@ -270,7 +270,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
     })
 
     render(
@@ -296,7 +296,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -321,7 +321,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     render(
@@ -351,7 +351,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
     const removeFromQueue = vi.fn()
     store.setState({
@@ -374,5 +374,174 @@ describe("QueueItemCard", () => {
     await screen.findByRole("alertdialog")
     fireEvent.click(screen.getByText("Remove"))
     expect(removeFromQueue).toHaveBeenCalledWith("q1")
+  })
+})
+
+describe("QueueItemCard quantities", () => {
+  it("shows a ×N badge next to the name when quantity > 1, nothing at 1", () => {
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
+    const single = createQueueItem({ id: "q1", figureId: "f1", quantity: 1 })
+
+    const { unmount } = render(
+      <QueueItemCard
+        queueItem={single}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+    expect(screen.queryByTestId("quantity-badge")).toBeNull()
+    unmount()
+
+    const multi = createQueueItem({ id: "q2", figureId: "f1", quantity: 3 })
+    render(
+      <QueueItemCard
+        queueItem={multi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+    expect(screen.getByTestId("quantity-badge").textContent).toBe("×3")
+  })
+
+  it("chips show completed-copies/quantity as text", () => {
+    const figure = createFigure({
+      id: "f1",
+      requiredColors: ["s-white", "s-red"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-red": 1 },
+    })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+
+    expect(screen.getByText("0/2")).toBeTruthy()
+    expect(screen.getByText("1/2")).toBeTruthy()
+  })
+
+  it("progress uses copies × colors totals", () => {
+    const figure = createFigure({
+      id: "f1",
+      requiredColors: ["s-white", "s-red"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-red": 1 },
+    })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+
+    expect(screen.getByText("1/4")).toBeTruthy()
+  })
+
+  it("the + stepper calls setQuantity with quantity + 1 and is disabled at 99", () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({ id: "q1", figureId: "f1", quantity: 2 })
+    const setQuantity = vi.fn(() => ({
+      type: "updated" as const,
+      completed: false,
+    }))
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+      setQuantity,
+    })
+
+    const { unmount } = render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+
+    fireEvent.click(screen.getByLabelText("Increase quantity of Goku"))
+    expect(setQuantity).toHaveBeenCalledWith("q1", 3)
+    unmount()
+
+    const maxed = createQueueItem({ id: "q2", figureId: "f1", quantity: 99 })
+    render(
+      <QueueItemCard
+        queueItem={maxed}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+    const plus = screen.getByLabelText(
+      "Increase quantity of Goku"
+    ) as HTMLButtonElement
+    expect(plus.disabled).toBe(true)
+  })
+
+  it("the − stepper calls setQuantity with quantity − 1 and does nothing at 1", () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({ id: "q1", figureId: "f1", quantity: 2 })
+    const setQuantity = vi.fn(() => ({
+      type: "updated" as const,
+      completed: false,
+    }))
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+      setQuantity,
+    })
+
+    const { unmount } = render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+
+    fireEvent.click(screen.getByLabelText("Decrease quantity of Goku"))
+    expect(setQuantity).toHaveBeenCalledWith("q1", 1)
+    unmount()
+    setQuantity.mockClear()
+
+    const atOne = createQueueItem({ id: "q2", figureId: "f1", quantity: 1 })
+    render(
+      <QueueItemCard
+        queueItem={atOne}
+        figure={figure}
+        brands={brands}
+        spools={spools}
+      />
+    )
+    fireEvent.click(screen.getByLabelText("Decrease quantity of Goku"))
+    expect(setQuantity).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,89 @@
+{
+  "version": 2,
+  "exportedAt": "2026-08-29T09:15:00.000Z",
+  "data": {
+    "spools": {
+      "sp-green": {
+        "id": "sp-green",
+        "name": "Green",
+        "hex": "#22c55e"
+      },
+      "sp-black": {
+        "id": "sp-black",
+        "name": "Black",
+        "hex": "#1a1a1a"
+      },
+      "sp-brown": {
+        "id": "sp-brown",
+        "name": "Brown",
+        "hex": "#78533a"
+      }
+    },
+    "brands": {
+      "b-toy-story": {
+        "id": "b-toy-story",
+        "name": "Toy Story"
+      },
+      "b-god-of-war": {
+        "id": "b-god-of-war",
+        "name": "God of War"
+      }
+    },
+    "figures": {
+      "fig-buzz": {
+        "id": "fig-buzz",
+        "name": "Buzz",
+        "brandId": "b-toy-story",
+        "size": 60,
+        "notes": "",
+        "requiredColors": ["sp-green", "sp-black"]
+      },
+      "fig-woody": {
+        "id": "fig-woody",
+        "name": "Woody",
+        "brandId": "b-toy-story",
+        "size": 60,
+        "notes": "",
+        "requiredColors": ["sp-green", "sp-brown"]
+      },
+      "fig-kratos": {
+        "id": "fig-kratos",
+        "name": "Kratos",
+        "brandId": "b-god-of-war",
+        "size": 75,
+        "notes": "beard first",
+        "requiredColors": ["sp-black", "sp-brown"]
+      }
+    },
+    "queueItems": {
+      "qi-buzz-a": {
+        "id": "qi-buzz-a",
+        "figureId": "fig-buzz",
+        "type": "order",
+        "completedColors": [],
+        "completedAt": null
+      },
+      "qi-buzz-b": {
+        "id": "qi-buzz-b",
+        "figureId": "fig-buzz",
+        "type": "order",
+        "completedColors": ["sp-green"],
+        "completedAt": null
+      },
+      "qi-woody": {
+        "id": "qi-woody",
+        "figureId": "fig-woody",
+        "type": "stock",
+        "completedColors": ["sp-green", "sp-brown"],
+        "completedAt": "2026-08-20T10:30:00.000Z"
+      },
+      "qi-kratos": {
+        "id": "qi-kratos",
+        "figureId": "fig-kratos",
+        "type": "order",
+        "completedColors": ["sp-stale"],
+        "completedAt": null
+      }
+    }
+  }
+}

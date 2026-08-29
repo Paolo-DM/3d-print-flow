@@ -76,3 +76,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
   summary: FigureForm is not key-reset on `dataGeneration`, so an import landing while the figure form is open leaves a draft whose `figure.id` may no longer exist; saving silently discards the user's edits.
   evidence: catalog.tsx key-resets BrandManager on dataGeneration but keys FigureForm on the figure id only; `updateFigure`'s missing-id guard returns state unchanged while `onSave()` still fires and closes the modal. Pre-existing (the form was never dataGeneration-keyed) and overlapping the 2026-08-28 Codex deferral above, which describes the same race from the overwrite direction.
+- source_spec: `/Users/paolo/repos/personal/3d-print-flow/_bmad-output/implementation-artifacts/spec-queue-quantities.md`
+  summary: Import normalization lacks a rebuildSpools sibling — spools pass through verbatim, so stray properties on spool rows survive import and re-export.
+  evidence: rebuildBrands/rebuildFigures/rebuildQueueItems all strip stray props; `spools: parsed.data.spools` passes through raw in every import path (pre-existing before queue-quantities, surfaced by its review).

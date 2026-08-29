@@ -64,6 +64,9 @@ function renderCompleted() {
   return render(<Stub initialEntries={["/completed"]} />)
 }
 
+// captured before any test swaps store commands for mocks
+const realRequeueCompleted = store.getState().requeueCompleted
+
 describe("Completed route", () => {
   it("renders empty state when no completed items", () => {
     renderCompleted()
@@ -75,7 +78,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
     store.setState({
       spools,
@@ -98,7 +101,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -122,7 +125,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -146,7 +149,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -156,7 +159,19 @@ describe("Completed route", () => {
     })
 
     renderCompleted()
-    expect(screen.getByText(/Completed\s+Mar/)).toBeTruthy()
+    // locale-agnostic: assert against the same formatter the component uses
+    const expectedDate = new Date(
+      "2026-03-30T10:00:00.000Z"
+    ).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+    expect(
+      screen.getByText(
+        (text) => text.includes("Completed") && text.includes(expectedDate)
+      )
+    ).toBeTruthy()
   })
 
   it("Print Again button calls requeueCompleted", () => {
@@ -168,10 +183,15 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
-    const requeueCompleted = vi.fn()
+    const requeueCompleted = vi.fn(() => ({
+      type: "requeued" as const,
+      merged: false,
+      quantity: 1,
+      clamped: false,
+    }))
     store.setState({
       spools,
       figures: new Map([["f1", figure]]),
@@ -194,7 +214,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -222,7 +242,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     const removeFromQueue = vi.fn()
@@ -256,13 +276,13 @@ describe("Completed route", () => {
     const qi1 = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-28T10:00:00.000Z",
     })
     const qi2 = createQueueItem({
       id: "q2",
       figureId: "f2",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -292,7 +312,7 @@ describe("Completed route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: ["s-white"],
+      completedCounts: { "s-white": 1 },
       completedAt: "2026-03-30T10:00:00.000Z",
     })
     store.setState({
@@ -308,5 +328,101 @@ describe("Completed route", () => {
 
     expect(screen.getByText("Print Again")).toBeTruthy()
     expect(screen.getAllByRole("switch")).toHaveLength(1)
+  })
+
+  it("shows ×N on completed cards when quantity > 1", () => {
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-white": 2 },
+      completedAt: "2026-03-30T10:00:00.000Z",
+    })
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+    })
+
+    renderCompleted()
+    expect(screen.getByTestId("quantity-badge").textContent).toBe("×2")
+  })
+
+  it("Print Again presents the requeue result as a toast", async () => {
+    const { toast } = await import("sonner")
+    const successSpy = vi.spyOn(toast, "success")
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const qi = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      quantity: 2,
+      completedCounts: { "s-white": 2 },
+      completedAt: "2026-03-30T10:00:00.000Z",
+    })
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([["q1", qi]]),
+      // an earlier test replaced the command with a mock — restore the real one
+      requeueCompleted: realRequeueCompleted,
+    })
+
+    renderCompleted()
+    fireEvent.click(screen.getByLabelText("View details for Kratos"))
+    fireEvent.click(screen.getByText("Print Again"))
+
+    expect(successSpy).toHaveBeenCalledWith("Kratos ×2 back in queue")
+    successSpy.mockRestore()
+  })
+
+  it("Print Again into an existing active entry presents the merged toast", async () => {
+    const { toast } = await import("sonner")
+    const successSpy = vi.spyOn(toast, "success")
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const completed = createQueueItem({
+      id: "q1",
+      figureId: "f1",
+      type: "order",
+      quantity: 2,
+      completedCounts: { "s-white": 2 },
+      completedAt: "2026-03-30T10:00:00.000Z",
+    })
+    const active = createQueueItem({
+      id: "q0",
+      figureId: "f1",
+      type: "order",
+      quantity: 1,
+      completedCounts: {},
+    })
+    store.setState({
+      spools,
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([
+        ["q1", completed],
+        ["q0", active],
+      ]),
+      requeueCompleted: realRequeueCompleted,
+    })
+
+    renderCompleted()
+    fireEvent.click(screen.getByLabelText("View details for Kratos"))
+    fireEvent.click(screen.getByText("Print Again"))
+
+    expect(successSpy).toHaveBeenCalledWith("Merged into queue: Kratos now ×3")
+    expect(store.getState().queueItems.get("q0")?.quantity).toBe(3)
+    successSpy.mockRestore()
   })
 })

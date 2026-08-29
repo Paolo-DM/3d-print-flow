@@ -100,12 +100,12 @@ describe("computeColorRanking", () => {
     const q1 = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      completedColors: [],
+      completedCounts: {},
     })
     const q2 = createQueueItem({
       id: "q2",
       figureId: "fig-2",
-      completedColors: [],
+      completedCounts: {},
     })
 
     const spools = new Map([
@@ -136,7 +136,7 @@ describe("computeColorRanking", () => {
     const q1 = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      completedColors: ["s1"],
+      completedCounts: { s1: 1 },
     })
 
     const spools = new Map([
@@ -170,7 +170,7 @@ describe("computeColorRanking", () => {
       id: "q1",
       figureId: "fig-1",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
 
     const spools = new Map([["s1", s1]])
@@ -191,7 +191,7 @@ describe("computeColorRanking", () => {
     const q1 = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     const spools = new Map([["s1", s1]])
@@ -211,7 +211,7 @@ describe("computeColorRanking", () => {
       id: "q1",
       figureId: "fig-1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
 
     const spools = new Map([["s1", s1]])
@@ -222,12 +222,137 @@ describe("computeColorRanking", () => {
 
     expect(result[0].hasOrders).toBe(false)
   })
+
+  it("weights by outstanding copies: Buzz ×2 + Woody ×1 rank Green at 3; one green tap drops it to 2", () => {
+    const green = createSpool({ id: "s-green", name: "Green" })
+    const buzz = createFigure({ id: "fig-buzz", requiredColors: ["s-green"] })
+    const woody = createFigure({ id: "fig-woody", requiredColors: ["s-green"] })
+    const buzzQi = createQueueItem({
+      id: "q-buzz",
+      figureId: "fig-buzz",
+      quantity: 2,
+      completedCounts: {},
+    })
+    const woodyQi = createQueueItem({
+      id: "q-woody",
+      figureId: "fig-woody",
+      quantity: 1,
+      completedCounts: {},
+    })
+
+    const spools = new Map([["s-green", green]])
+    const figures = new Map([
+      ["fig-buzz", buzz],
+      ["fig-woody", woody],
+    ])
+    const queueItems = new Map([
+      ["q-buzz", buzzQi],
+      ["q-woody", woodyQi],
+    ])
+
+    expect(computeColorRanking(spools, figures, queueItems)[0].count).toBe(3)
+
+    queueItems.set("q-buzz", {
+      ...buzzQi,
+      completedCounts: { "s-green": 1 },
+    })
+    expect(computeColorRanking(spools, figures, queueItems)[0].count).toBe(2)
+  })
+
+  it("excludes a spool once every copy of it is printed", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      quantity: 2,
+      completedCounts: { s1: 2 },
+    })
+
+    const result = computeColorRanking(
+      new Map([["s1", s1]]),
+      new Map([["fig-1", fig]]),
+      new Map([["q1", q1]])
+    )
+
+    expect(result).toEqual([])
+  })
+
+  it("hasOrders flags on any order entry with outstanding copies", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const partialOrder = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      type: "order",
+      quantity: 2,
+      completedCounts: { s1: 1 },
+    })
+
+    const result = computeColorRanking(
+      new Map([["s1", s1]]),
+      new Map([["fig-1", fig]]),
+      new Map([["q1", partialOrder]])
+    )
+
+    expect(result[0].count).toBe(1)
+    expect(result[0].hasOrders).toBe(true)
+  })
+
+  it("breaks equal counts by spool name ascending, then id", () => {
+    const zed = createSpool({ id: "s-a", name: "Zed" })
+    const amber1 = createSpool({ id: "s-c", name: "Amber" })
+    const amber2 = createSpool({ id: "s-b", name: "Amber" })
+    const fig = createFigure({
+      id: "fig-1",
+      requiredColors: ["s-a", "s-c", "s-b"],
+    })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      completedCounts: {},
+    })
+
+    const result = computeColorRanking(
+      new Map([
+        ["s-a", zed],
+        ["s-c", amber1],
+        ["s-b", amber2],
+      ]),
+      new Map([["fig-1", fig]]),
+      new Map([["q1", q1]])
+    )
+
+    // equal counts: "Amber" before "Zed"; the two Ambers order by id
+    expect(result.map((entry) => entry.spool.id)).toEqual(["s-b", "s-c", "s-a"])
+  })
+
+  it("ignores stray count keys outside requiredColors", () => {
+    const s1 = createSpool({ id: "s1" })
+    const fig = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const q1 = createQueueItem({
+      id: "q1",
+      figureId: "fig-1",
+      quantity: 1,
+      completedCounts: { "s-stale": 1 },
+    })
+
+    const result = computeColorRanking(
+      new Map([["s1", s1]]),
+      new Map([["fig-1", fig]]),
+      new Map([["q1", q1]])
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0].spool.id).toBe("s1")
+    expect(result[0].count).toBe(1)
+  })
 })
 
 describe("computeFigureProgress", () => {
-  it("intersects completedColors with current requiredColors (stale entries ignored)", () => {
+  it("sums over requiredColors only (stale count keys never inflate progress)", () => {
     const qi = createQueueItem({
-      completedColors: ["s1", "s-stale"],
+      completedCounts: { s1: 1, "s-stale": 1 },
     })
     const fig = createFigure({ requiredColors: ["s1", "s2", "s3"] })
 
@@ -237,7 +362,7 @@ describe("computeFigureProgress", () => {
   })
 
   it("returns { completed: 0, total: 0 } for null figure", () => {
-    const qi = createQueueItem({ completedColors: ["s1"] })
+    const qi = createQueueItem({ completedCounts: { s1: 1 } })
 
     const result = computeFigureProgress(qi, null)
 
@@ -245,40 +370,92 @@ describe("computeFigureProgress", () => {
   })
 
   it("returns { completed: 0, total: 0 } for undefined figure", () => {
-    const qi = createQueueItem({ completedColors: ["s1"] })
+    const qi = createQueueItem({ completedCounts: { s1: 1 } })
 
     const result = computeFigureProgress(qi, undefined)
 
     expect(result).toEqual({ completed: 0, total: 0 })
   })
+
+  it("total is colors × quantity; completed sums per-color counts", () => {
+    const qi = createQueueItem({
+      quantity: 2,
+      completedCounts: { s1: 1 },
+    })
+    const fig = createFigure({ requiredColors: ["s1", "s2"] })
+
+    expect(computeFigureProgress(qi, fig)).toEqual({ completed: 1, total: 4 })
+  })
+
+  it("clamps a stray count above quantity when summing", () => {
+    const qi = createQueueItem({
+      quantity: 2,
+      completedCounts: { s1: 5 },
+    })
+    const fig = createFigure({ requiredColors: ["s1", "s2"] })
+
+    expect(computeFigureProgress(qi, fig)).toEqual({ completed: 2, total: 4 })
+  })
+
+  it("a missing count key reads as 0", () => {
+    const qi = createQueueItem({ quantity: 3, completedCounts: {} })
+    const fig = createFigure({ requiredColors: ["s1"] })
+
+    expect(computeFigureProgress(qi, fig)).toEqual({ completed: 0, total: 3 })
+  })
 })
 
 describe("computeCompletionStatus", () => {
   it("returns true only when all required colors are completed", () => {
-    const qi = createQueueItem({ completedColors: ["s1", "s2"] })
+    const qi = createQueueItem({ completedCounts: { s1: 1, s2: 1 } })
     const fig = createFigure({ requiredColors: ["s1", "s2"] })
 
     expect(computeCompletionStatus(qi, fig)).toBe(true)
   })
 
   it("returns false when not all required colors are completed", () => {
-    const qi = createQueueItem({ completedColors: ["s1"] })
+    const qi = createQueueItem({ completedCounts: { s1: 1 } })
     const fig = createFigure({ requiredColors: ["s1", "s2"] })
 
     expect(computeCompletionStatus(qi, fig)).toBe(false)
   })
 
   it("returns false for figure with zero requiredColors", () => {
-    const qi = createQueueItem({ completedColors: [] })
+    const qi = createQueueItem({ completedCounts: {} })
     const fig = createFigure({ requiredColors: [] })
 
     expect(computeCompletionStatus(qi, fig)).toBe(false)
   })
 
   it("returns false for null figure", () => {
-    const qi = createQueueItem({ completedColors: ["s1"] })
+    const qi = createQueueItem({ completedCounts: { s1: 1 } })
 
     expect(computeCompletionStatus(qi, null)).toBe(false)
+  })
+
+  it("requires every required color to reach quantity", () => {
+    const fig = createFigure({ requiredColors: ["s1", "s2"] })
+    const partial = createQueueItem({
+      quantity: 2,
+      completedCounts: { s1: 2, s2: 1 },
+    })
+    const full = createQueueItem({
+      quantity: 2,
+      completedCounts: { s1: 2, s2: 2 },
+    })
+
+    expect(computeCompletionStatus(partial, fig)).toBe(false)
+    expect(computeCompletionStatus(full, fig)).toBe(true)
+  })
+
+  it("stale count keys never make an entry complete", () => {
+    const fig = createFigure({ requiredColors: ["s1"] })
+    const qi = createQueueItem({
+      quantity: 1,
+      completedCounts: { "s-stale": 1 },
+    })
+
+    expect(computeCompletionStatus(qi, fig)).toBe(false)
   })
 })
 

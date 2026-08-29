@@ -29,6 +29,15 @@ export function computeAffectedQueueItems(
   )
 }
 
+/** Copies of `queueItem` still to print in `spoolId` (stale counts clamp to 0). */
+export function computeOutstandingCopies(
+  queueItem: QueueItem,
+  spoolId: string
+): number {
+  const count = queueItem.completedCounts[spoolId] ?? 0
+  return queueItem.quantity - Math.min(count, queueItem.quantity)
+}
+
 export function computeColorRanking(
   spools: Map<string, Spool>,
   figures: Map<string, Figure>,
@@ -41,20 +50,26 @@ export function computeColorRanking(
     const figure = figures.get(qi.figureId)
     if (!figure) continue
     for (const spoolId of figure.requiredColors) {
-      if (!qi.completedColors.includes(spoolId)) {
-        counts.set(spoolId, (counts.get(spoolId) ?? 0) + 1)
+      const outstanding = computeOutstandingCopies(qi, spoolId)
+      if (outstanding > 0) {
+        counts.set(spoolId, (counts.get(spoolId) ?? 0) + outstanding)
         if (qi.type === "order") orderFlags.set(spoolId, true)
       }
     }
   }
 
   return [...counts.entries()]
-    .toSorted(([, a], [, b]) => b - a)
     .flatMap(([spoolId, count]) => {
       const spool = spools.get(spoolId)
       if (!spool) return []
       return [{ spool, count, hasOrders: orderFlags.get(spoolId) ?? false }]
     })
+    .toSorted(
+      (a, b) =>
+        b.count - a.count ||
+        a.spool.name.localeCompare(b.spool.name) ||
+        a.spool.id.localeCompare(b.spool.id)
+    )
 }
 
 export function computeFigureProgress(
@@ -62,10 +77,12 @@ export function computeFigureProgress(
   figure: Figure | null | undefined
 ): FigureProgress {
   if (!figure) return { completed: 0, total: 0 }
-  const total = figure.requiredColors.length
-  const completed = figure.requiredColors.filter((c) =>
-    queueItem.completedColors.includes(c)
-  ).length
+  const total = figure.requiredColors.length * queueItem.quantity
+  let completed = 0
+  for (const spoolId of figure.requiredColors) {
+    const count = queueItem.completedCounts[spoolId] ?? 0
+    completed += Math.min(count, queueItem.quantity)
+  }
   return { completed, total }
 }
 

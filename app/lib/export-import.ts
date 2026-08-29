@@ -5,14 +5,17 @@ import {
   brandKey,
   isRecord,
   isValidFigureV1,
+  isValidQueueItemLegacy,
+  migrateLegacyQueueItems,
   migrateV1Figures,
   type FigureV1,
+  type QueueItemLegacy,
 } from "~/lib/migration"
-import { fromJSON, setPersist, toJSON } from "~/lib/store"
+import { fromJSON, MAX_QUEUE_QUANTITY, setPersist, toJSON } from "~/lib/store"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 
 export interface ExportEnvelope {
-  version: 2
+  version: 3
   exportedAt: string
   data: ReturnType<typeof toJSON>
 }
@@ -24,13 +27,25 @@ export interface ExportEnvelopeV1 {
   data: {
     spools: Record<string, Spool>
     figures: Record<string, FigureV1>
-    queueItems: Record<string, QueueItem>
+    queueItems: Record<string, QueueItemLegacy>
+  }
+}
+
+/** Legacy v2 envelope — accepted as import input only, never exported. */
+export interface ExportEnvelopeV2 {
+  version: 2
+  exportedAt: string
+  data: {
+    spools: Record<string, Spool>
+    brands: Record<string, Brand>
+    figures: Record<string, Figure>
+    queueItems: Record<string, QueueItemLegacy>
   }
 }
 
 export function buildExportData(): ExportEnvelope {
   return {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     data: toJSON(),
   }
@@ -107,17 +122,45 @@ function isValidFigure(value: unknown): boolean {
   )
 }
 
-function isValidQueueItem(value: unknown): boolean {
+/**
+ * v3 queue-item validator: quantity integer 1..99, counts a record of
+ * string → integer with 0 <= count <= quantity (quantity lives on the same
+ * row, so each row is fully checkable in isolation). Required-color
+ * membership is *not* validated — orphan tolerance, figures may drift.
+ */
+export function isValidQueueItem(value: unknown): boolean {
   if (!isRecord(value)) return false
+  if (
+    typeof value.id !== "string" ||
+    typeof value.figureId !== "string" ||
+    (value.type !== "stock" && value.type !== "order")
+  ) {
+    return false
+  }
+  const quantity = value.quantity
+  if (
+    typeof quantity !== "number" ||
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > MAX_QUEUE_QUANTITY
+  ) {
+    return false
+  }
+  if (!isRecord(value.completedCounts)) return false
+  for (const count of Object.values(value.completedCounts)) {
+    if (
+      typeof count !== "number" ||
+      !Number.isInteger(count) ||
+      count < 0 ||
+      count > quantity
+    ) {
+      return false
+    }
+  }
   return (
-    typeof value.id === "string" &&
-    typeof value.figureId === "string" &&
-    (value.type === "stock" || value.type === "order") &&
-    Array.isArray(value.completedColors) &&
-    value.completedColors.every((c: unknown) => typeof c === "string") &&
-    (!("completedAt" in value) ||
-      typeof value.completedAt === "string" ||
-      value.completedAt === null)
+    !("completedAt" in value) ||
+    typeof value.completedAt === "string" ||
+    value.completedAt === null
   )
 }
 
@@ -148,13 +191,27 @@ export function validateV1Envelope(data: unknown): data is ExportEnvelopeV1 {
   return (
     allValuesMatch(d.spools, isValidSpool) &&
     allValuesMatch(d.figures, isValidFigureV1) &&
-    allValuesMatch(d.queueItems, isValidQueueItem)
+    allValuesMatch(d.queueItems, isValidQueueItemLegacy)
+  )
+}
+
+/** Legacy v2 envelope — import input only (queue items still `completedColors`). */
+export function validateV2Envelope(data: unknown): data is ExportEnvelopeV2 {
+  if (!validateEnvelopeShell(data)) return false
+  if (data.version !== 2) return false
+
+  const d = data.data
+  return (
+    allValuesMatch(d.spools, isValidSpool) &&
+    isValidBrandCollection(d.brands) &&
+    allValuesMatch(d.figures, isValidFigure) &&
+    allValuesMatch(d.queueItems, isValidQueueItemLegacy)
   )
 }
 
 export function validateExportEnvelope(data: unknown): data is ExportEnvelope {
   if (!validateEnvelopeShell(data)) return false
-  if (data.version !== 2) return false
+  if (data.version !== 3) return false
 
   const d = data.data
   return (
@@ -191,6 +248,36 @@ function rebuildFigures(
   return result
 }
 
+/**
+ * v3 import normalization: rebuild each item with explicit fields (stray
+ * properties stripped), drop non-integer count entries, clamp counts to
+ * 0..quantity. Stale non-required keys are kept — derivation ignores them.
+ */
+export function rebuildQueueItems(
+  queueItems: Record<string, QueueItem>
+): Record<string, QueueItem> {
+  const result: Record<string, QueueItem> = {}
+  for (const [id, queueItem] of Object.entries(queueItems)) {
+    const completedCounts: Record<string, number> = {}
+    for (const [spoolId, count] of Object.entries(queueItem.completedCounts)) {
+      if (!Number.isInteger(count)) continue
+      completedCounts[spoolId] = Math.max(
+        0,
+        Math.min(count, queueItem.quantity)
+      )
+    }
+    result[id] = {
+      id: queueItem.id,
+      figureId: queueItem.figureId,
+      type: queueItem.type,
+      quantity: queueItem.quantity,
+      completedCounts,
+      completedAt: queueItem.completedAt ?? null,
+    }
+  }
+  return result
+}
+
 export function readJsonFile(file: File): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -216,14 +303,21 @@ export async function importData(file: File): Promise<void> {
       spools: parsed.data.spools,
       brands,
       figures,
-      queueItems: parsed.data.queueItems,
+      queueItems: migrateLegacyQueueItems(parsed.data.queueItems),
+    }
+  } else if (validateV2Envelope(parsed)) {
+    next = {
+      spools: parsed.data.spools,
+      brands: rebuildBrands(parsed.data.brands),
+      figures: rebuildFigures(parsed.data.figures),
+      queueItems: migrateLegacyQueueItems(parsed.data.queueItems),
     }
   } else if (validateExportEnvelope(parsed)) {
     next = {
       spools: parsed.data.spools,
       brands: rebuildBrands(parsed.data.brands),
       figures: rebuildFigures(parsed.data.figures),
-      queueItems: parsed.data.queueItems,
+      queueItems: rebuildQueueItems(parsed.data.queueItems),
     }
   } else {
     throw new Error(

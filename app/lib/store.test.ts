@@ -164,12 +164,14 @@ describe("store mutations", () => {
     expect(store.getState().figures).toBe(before)
   })
 
-  it("updateFigure keeps the queueItems Map reference unchanged", () => {
-    const figure = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+  it("updateFigure keeps the queueItems Map reference unchanged when no completedAt shifts", () => {
+    // counts untouched by a color edit; completedAt null before and after
+    const figure = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
     const queueItem = createQueueItem({
       id: "q1",
       figureId: figure.id,
-      completedColors: ["s1"],
+      completedCounts: { s1: 1 },
+      completedAt: null,
     })
     const queueItems = new Map([[queueItem.id, queueItem]])
 
@@ -179,11 +181,75 @@ describe("store mutations", () => {
     })
 
     store.getState().updateFigure(figure.id, {
-      requiredColors: ["s2"],
+      requiredColors: ["s1", "s3"],
     })
 
     expect(store.getState().queueItems).toBe(queueItems)
     expect(store.getState().queueItems.get(queueItem.id)).toEqual(queueItem)
+  })
+
+  it("updateFigure cascade: removing the only incomplete color completes referencing items in the same update", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-29T12:00:00.000Z"))
+
+    const figure = createFigure({ id: "fig-1", requiredColors: ["s1", "s2"] })
+    const queueItem = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      completedCounts: { s1: 1 },
+      completedAt: null,
+    })
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([[queueItem.id, queueItem]]),
+    })
+
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+    try {
+      store.getState().updateFigure(figure.id, { requiredColors: ["s1"] })
+      expect(notifications).toBe(1)
+    } finally {
+      unsubscribe()
+    }
+
+    expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
+      "2026-08-29T12:00:00.000Z"
+    )
+    expect(store.getState().queueItems.get("q1")?.completedCounts).toEqual({
+      s1: 1,
+    })
+
+    vi.useRealTimers()
+  })
+
+  it("updateFigure cascade: adding a color un-completes referencing items in the same update", () => {
+    const figure = createFigure({ id: "fig-1", requiredColors: ["s1"] })
+    const queueItem = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-01T10:00:00.000Z",
+    })
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      queueItems: new Map([[queueItem.id, queueItem]]),
+    })
+
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+    try {
+      store.getState().updateFigure(figure.id, { requiredColors: ["s1", "s2"] })
+      expect(notifications).toBe(1)
+    } finally {
+      unsubscribe()
+    }
+
+    expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
   })
 
   it("deleteFigure removes figure from figures Map", () => {
@@ -541,164 +607,742 @@ describe("brand lifecycle commands", () => {
 })
 
 describe("queue mutations", () => {
-  it("addToQueue creates a QueueItem with correct fields and UUID", () => {
-    store.getState().addToQueue("fig-1", "stock")
-    const items = store.getState().queueItems
-    expect(items.size).toBe(1)
-    const item = [...items.values()][0]
-    expect(item.id).toBeTruthy()
-    expect(item.figureId).toBe("fig-1")
-    expect(item.type).toBe("stock")
-    expect(item.completedColors).toEqual([])
-    expect(item.completedAt).toBeNull()
-  })
-
-  it("addToQueue allows duplicate figureId entries", () => {
-    store.getState().addToQueue("fig-1", "stock")
-    store.getState().addToQueue("fig-1", "order")
-    const items = [...store.getState().queueItems.values()]
-    expect(items).toHaveLength(2)
-    expect(items[0].figureId).toBe("fig-1")
-    expect(items[1].figureId).toBe("fig-1")
-    expect(items[0].id).not.toBe(items[1].id)
-  })
-
-  it("removeFromQueue removes the correct item", () => {
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
-    const q2 = createQueueItem({ id: "q2", figureId: "fig-2" })
+  /** Seed a figure so queue commands pass their figure guards. */
+  function seedFigure(
+    id = "fig-1",
+    requiredColors: string[] = ["s1"]
+  ): ReturnType<typeof createFigure> {
+    const figure = createFigure({ id, requiredColors })
     store.setState({
-      queueItems: new Map([
-        ["q1", q1],
-        ["q2", q2],
-      ]),
+      figures: new Map([...store.getState().figures, [figure.id, figure]]),
     })
-    store.getState().removeFromQueue("q1")
-    expect(store.getState().queueItems.size).toBe(1)
-    expect(store.getState().queueItems.has("q1")).toBe(false)
-    expect(store.getState().queueItems.get("q2")).toEqual(q2)
-  })
+    return figure
+  }
 
-  it("removeFromQueue is no-op for non-existent ID", () => {
-    const q1 = createQueueItem({ id: "q1" })
-    store.setState({ queueItems: new Map([["q1", q1]]) })
-    const before = store.getState().queueItems
-    store.getState().removeFromQueue("nonexistent")
-    expect(store.getState().queueItems).toBe(before)
-  })
-
-  it("toggleChip adds spool ID to completedColors when absent", () => {
-    const q1 = createQueueItem({ id: "q1", completedColors: [] })
-    store.setState({ queueItems: new Map([["q1", q1]]) })
-    store.getState().toggleChip("q1", "spool-1")
-    expect(store.getState().queueItems.get("q1")?.completedColors).toEqual([
-      "spool-1",
-    ])
-  })
-
-  it("toggleChip removes spool ID from completedColors when present", () => {
-    const q1 = createQueueItem({
-      id: "q1",
-      completedColors: ["spool-1", "spool-2"],
-    })
-    store.setState({ queueItems: new Map([["q1", q1]]) })
-    store.getState().toggleChip("q1", "spool-1")
-    expect(store.getState().queueItems.get("q1")?.completedColors).toEqual([
-      "spool-2",
-    ])
-  })
-
-  it("toggleChip is no-op for non-existent queue item", () => {
-    const q1 = createQueueItem({ id: "q1" })
-    store.setState({ queueItems: new Map([["q1", q1]]) })
-    const before = store.getState().queueItems
-    store.getState().toggleChip("nonexistent", "spool-1")
-    expect(store.getState().queueItems).toBe(before)
-  })
-
-  it("toggleChip stamps completedAt when an item becomes complete", () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date("2026-03-31T12:00:00.000Z"))
-
-    const figure = createFigure({ id: "fig-1", requiredColors: ["spool-1"] })
-    const q1 = createQueueItem({
-      id: "q1",
-      figureId: figure.id,
-      completedColors: [],
-      completedAt: null,
+  describe("addToQueue", () => {
+    it("creates a QueueItem with quantity 1, empty counts, and UUID", () => {
+      seedFigure("fig-1")
+      const result = store.getState().addToQueue("fig-1", "stock")
+      expect(result).toEqual({ type: "created" })
+      const items = store.getState().queueItems
+      expect(items.size).toBe(1)
+      const item = [...items.values()][0]
+      expect(item.id).toBeTruthy()
+      expect(item.figureId).toBe("fig-1")
+      expect(item.type).toBe("stock")
+      expect(item.quantity).toBe(1)
+      expect(item.completedCounts).toEqual({})
+      expect(item.completedAt).toBeNull()
     })
 
-    store.setState({
-      figures: new Map([[figure.id, figure]]),
-      queueItems: new Map([["q1", q1]]),
+    it("accepts an explicit quantity on create, clamped to 99", () => {
+      seedFigure("fig-1")
+      store.getState().addToQueue("fig-1", "order", 15)
+      expect([...store.getState().queueItems.values()][0].quantity).toBe(15)
+
+      store.setState({ queueItems: new Map() })
+      store.getState().addToQueue("fig-1", "order", 250)
+      expect([...store.getState().queueItems.values()][0].quantity).toBe(99)
     })
 
-    store.getState().toggleChip("q1", "spool-1")
+    it("rejects a missing figure and a figure with no required colors", () => {
+      seedFigure("fig-colorless", [])
+      expect(store.getState().addToQueue("missing", "stock")).toEqual({
+        type: "rejected",
+      })
+      expect(store.getState().addToQueue("fig-colorless", "stock")).toEqual({
+        type: "rejected",
+      })
+      expect(store.getState().queueItems.size).toBe(0)
+    })
 
-    expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
-      "2026-03-31T12:00:00.000Z"
-    )
+    it("rejects non-integer or non-finite quantity without mutating", () => {
+      seedFigure("fig-1")
+      for (const quantity of [1.5, NaN, Infinity, -Infinity]) {
+        expect(store.getState().addToQueue("fig-1", "stock", quantity)).toEqual(
+          { type: "invalid" }
+        )
+      }
+      expect(store.getState().queueItems.size).toBe(0)
+    })
 
-    vi.useRealTimers()
+    it("merges into an active same-figure+type entry, counts untouched", () => {
+      seedFigure("fig-1", ["s1", "s2"])
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        type: "order",
+        quantity: 2,
+        completedCounts: { s1: 1 },
+      })
+      store.setState({ queueItems: new Map([["q1", existing]]) })
+
+      const result = store.getState().addToQueue("fig-1", "order")
+
+      expect(result).toEqual({ type: "merged", quantity: 3, clamped: false })
+      expect(store.getState().queueItems.size).toBe(1)
+      const merged = store.getState().queueItems.get("q1")!
+      expect(merged.quantity).toBe(3)
+      expect(merged.completedCounts).toEqual({ s1: 1 })
+      expect(merged.completedAt).toBeNull()
+    })
+
+    it("creates a new row for a different type (stock vs order stay separate)", () => {
+      seedFigure("fig-1")
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        type: "stock",
+      })
+      store.setState({ queueItems: new Map([["q1", existing]]) })
+
+      expect(store.getState().addToQueue("fig-1", "order")).toEqual({
+        type: "created",
+      })
+      expect(store.getState().queueItems.size).toBe(2)
+    })
+
+    it("never merges into a completed-by-derivation entry", () => {
+      seedFigure("fig-1", ["s1"])
+      const completed = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        type: "stock",
+        quantity: 1,
+        completedCounts: { s1: 1 },
+        completedAt: "2026-08-01T10:00:00.000Z",
+      })
+      store.setState({ queueItems: new Map([["q1", completed]]) })
+
+      expect(store.getState().addToQueue("fig-1", "stock")).toEqual({
+        type: "created",
+      })
+      expect(store.getState().queueItems.size).toBe(2)
+      expect(store.getState().queueItems.get("q1")).toEqual(completed)
+    })
+
+    it("with several active candidates the smallest id receives the merge", () => {
+      seedFigure("fig-1", ["s1"])
+      const a = createQueueItem({ id: "qa", figureId: "fig-1", type: "stock" })
+      const b = createQueueItem({ id: "qb", figureId: "fig-1", type: "stock" })
+      store.setState({
+        queueItems: new Map([
+          ["qb", b],
+          ["qa", a],
+        ]),
+      })
+
+      store.getState().addToQueue("fig-1", "stock")
+
+      expect(store.getState().queueItems.get("qa")?.quantity).toBe(2)
+      expect(store.getState().queueItems.get("qb")?.quantity).toBe(1)
+    })
+
+    it("clamps a merge at 99 and reports it: 98 + 2 -> 99 clamped", () => {
+      seedFigure("fig-1", ["s1"])
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        type: "stock",
+        quantity: 98,
+      })
+      store.setState({ queueItems: new Map([["q1", existing]]) })
+
+      expect(store.getState().addToQueue("fig-1", "stock", 2)).toEqual({
+        type: "merged",
+        quantity: 99,
+        clamped: true,
+      })
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(99)
+    })
   })
 
-  it("toggleChip clears completedAt when a completed item becomes incomplete", () => {
-    const figure = createFigure({ id: "fig-1", requiredColors: ["spool-1"] })
-    const q1 = createQueueItem({
-      id: "q1",
-      figureId: figure.id,
-      completedColors: ["spool-1"],
-      completedAt: "2026-03-31T12:00:00.000Z",
+  describe("removeFromQueue", () => {
+    it("removes the correct item", () => {
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+      const q2 = createQueueItem({ id: "q2", figureId: "fig-2" })
+      store.setState({
+        queueItems: new Map([
+          ["q1", q1],
+          ["q2", q2],
+        ]),
+      })
+      store.getState().removeFromQueue("q1")
+      expect(store.getState().queueItems.size).toBe(1)
+      expect(store.getState().queueItems.has("q1")).toBe(false)
+      expect(store.getState().queueItems.get("q2")).toEqual(q2)
     })
 
-    store.setState({
-      figures: new Map([[figure.id, figure]]),
-      queueItems: new Map([["q1", q1]]),
+    it("is a no-op for non-existent ID", () => {
+      const q1 = createQueueItem({ id: "q1" })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+      store.getState().removeFromQueue("nonexistent")
+      expect(store.getState().queueItems).toBe(before)
     })
-
-    store.getState().toggleChip("q1", "spool-1")
-
-    expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
   })
 
-  it("requeueCompleted creates new queue item from catalog's current requiredColors with empty completedColors", () => {
-    const figure = createFigure({
-      id: "fig-1",
-      requiredColors: ["s1", "s2"],
+  describe("toggleChip", () => {
+    it("advances a color's count by one at quantity 1 (toggle parity)", () => {
+      seedFigure("fig-1", ["spool-1", "spool-2"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        completedCounts: {},
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      store.getState().toggleChip("q1", "spool-1")
+      expect(
+        store.getState().queueItems.get("q1")?.completedCounts["spool-1"]
+      ).toBe(1)
     })
-    const q1 = createQueueItem({
-      id: "q1",
-      figureId: "fig-1",
-      type: "order",
-      completedColors: ["s1", "s2"],
+
+    it("cycles a full color back to 0 at quantity 1 (untoggle parity)", () => {
+      seedFigure("fig-1", ["spool-1", "spool-2"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        completedCounts: { "spool-1": 1, "spool-2": 1 },
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      store.getState().toggleChip("q1", "spool-1")
+      expect(store.getState().queueItems.get("q1")?.completedCounts).toEqual({
+        "spool-1": 0,
+        "spool-2": 1,
+      })
     })
-    store.setState({
-      figures: new Map([["fig-1", figure]]),
-      queueItems: new Map([["q1", q1]]),
+
+    it("cycles 0 -> 1 -> 2 -> 0 at quantity 2, driving completedAt", () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date("2026-08-29T12:00:00.000Z"))
+
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 2,
+        completedCounts: {},
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      store.getState().toggleChip("q1", "s1")
+      expect(store.getState().queueItems.get("q1")?.completedCounts.s1).toBe(1)
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
+
+      store.getState().toggleChip("q1", "s1")
+      expect(store.getState().queueItems.get("q1")?.completedCounts.s1).toBe(2)
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
+        "2026-08-29T12:00:00.000Z"
+      )
+
+      store.getState().toggleChip("q1", "s1")
+      expect(store.getState().queueItems.get("q1")?.completedCounts.s1).toBe(0)
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
+
+      vi.useRealTimers()
     })
-    store.getState().requeueCompleted("q1")
-    const items = [...store.getState().queueItems.values()]
-    expect(items).toHaveLength(2)
-    const newItem = items.find((i) => i.id !== "q1")!
-    expect(newItem.figureId).toBe("fig-1")
-    expect(newItem.type).toBe("order")
-    expect(newItem.completedColors).toEqual([])
-    expect(newItem.completedAt).toBeNull()
-    // Original is NOT removed
-    expect(store.getState().queueItems.has("q1")).toBe(true)
+
+    it("sets completedAt exactly when the last color reaches quantity", () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date("2026-03-31T12:00:00.000Z"))
+
+      seedFigure("fig-1", ["s1", "s2"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 2,
+        completedCounts: { s1: 2, s2: 1 },
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      store.getState().toggleChip("q1", "s2")
+
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
+        "2026-03-31T12:00:00.000Z"
+      )
+
+      vi.useRealTimers()
+    })
+
+    it("clears a stored completedAt when a complete entry cycles past full", () => {
+      // canonical rule, cleared branch: not complete → null
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 1,
+        completedCounts: { s1: 1 },
+        completedAt: "2026-08-01T10:00:00.000Z",
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      store.getState().toggleChip("q1", "s1")
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
+    })
+
+    it("preserves an existing completedAt when a mutation leaves the entry complete", () => {
+      // canonical rule, preserved branch: still complete → existing stamp,
+      // never re-stamped with now. Removing one of two fully-completed
+      // required colors keeps the entry complete.
+      const figure = seedFigure("fig-1", ["s1", "s2"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 1,
+        completedCounts: { s1: 1, s2: 1 },
+        completedAt: "2026-08-01T10:00:00.000Z",
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      store.getState().updateFigure(figure.id, { requiredColors: ["s1"] })
+
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBe(
+        "2026-08-01T10:00:00.000Z"
+      )
+    })
+
+    it("is a no-op for a non-existent queue item", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+      store.getState().toggleChip("nonexistent", "s1")
+      expect(store.getState().queueItems).toBe(before)
+    })
+
+    it("is a no-op when the figure is missing", () => {
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-gone" })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+      store.getState().toggleChip("q1", "s1")
+      expect(store.getState().queueItems).toBe(before)
+    })
+
+    it("is a no-op for a spool outside the figure's requiredColors", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+      vi.clearAllMocks()
+      store.getState().toggleChip("q1", "s-unknown")
+      expect(store.getState().queueItems).toBe(before)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
   })
 
-  it("requeueCompleted is no-op for non-existent queue item", () => {
-    const before = store.getState().queueItems
-    store.getState().requeueCompleted("nonexistent")
-    expect(store.getState().queueItems).toBe(before)
+  describe("setQuantity", () => {
+    it("updates the quantity of an active entry", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1", quantity: 1 })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      expect(store.getState().setQuantity("q1", 5)).toEqual({
+        type: "updated",
+        completed: false,
+      })
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(5)
+    })
+
+    it("clamps integer input to 1..99", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1", quantity: 5 })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      store.getState().setQuantity("q1", 0)
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(1)
+      store.getState().setQuantity("q1", 500)
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(99)
+    })
+
+    it("rejects NaN, Infinity, and 1.5 without mutating", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-1", quantity: 2 })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+
+      for (const quantity of [NaN, Infinity, 1.5]) {
+        expect(store.getState().setQuantity("q1", quantity)).toEqual({
+          type: "invalid",
+        })
+      }
+      expect(store.getState().queueItems).toBe(before)
+    })
+
+    it("returns not-active for a completed-by-derivation entry", () => {
+      seedFigure("fig-1", ["s1"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 1,
+        completedCounts: { s1: 1 },
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      expect(store.getState().setQuantity("q1", 2)).toEqual({
+        type: "not-active",
+      })
+      expect(store.getState().queueItems.get("q1")).toEqual(q1)
+    })
+
+    it("returns not-found for a missing entry", () => {
+      expect(store.getState().setQuantity("missing", 2)).toEqual({
+        type: "not-found",
+      })
+    })
+
+    it("lowering 2 -> 1 clamps counts and completes when every color reaches 1", () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date("2026-08-29T12:00:00.000Z"))
+
+      seedFigure("fig-1", ["red", "gold"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 2,
+        completedCounts: { red: 2, gold: 1 },
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      expect(store.getState().setQuantity("q1", 1)).toEqual({
+        type: "updated",
+        completed: true,
+      })
+      const updated = store.getState().queueItems.get("q1")!
+      expect(updated.completedCounts).toEqual({ red: 1, gold: 1 })
+      expect(updated.completedAt).toBe("2026-08-29T12:00:00.000Z")
+
+      vi.useRealTimers()
+    })
+
+    it("lowering that does not complete reports completed: false", () => {
+      seedFigure("fig-1", ["red", "gold"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        quantity: 3,
+        completedCounts: { red: 3 },
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+
+      expect(store.getState().setQuantity("q1", 2)).toEqual({
+        type: "updated",
+        completed: false,
+      })
+      expect(store.getState().queueItems.get("q1")?.completedCounts).toEqual({
+        red: 2,
+      })
+      expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
+    })
   })
 
-  it("requeueCompleted is no-op when figure doesn't exist", () => {
-    const q1 = createQueueItem({ id: "q1", figureId: "fig-gone" })
-    store.setState({ queueItems: new Map([["q1", q1]]) })
-    const before = store.getState().queueItems
-    store.getState().requeueCompleted("q1")
-    expect(store.getState().queueItems).toBe(before)
+  describe("addBatchToQueue", () => {
+    it("queues the whole batch in one store update (one write per map)", () => {
+      seedFigure("fig-a", ["s1"])
+      seedFigure("fig-b", ["s2"])
+      seedFigure("fig-c", ["s1", "s2"])
+      vi.clearAllMocks()
+
+      let notifications = 0
+      const unsubscribe = store.subscribe(() => {
+        notifications += 1
+      })
+      let result
+      try {
+        result = store.getState().addBatchToQueue(
+          [
+            { figureId: "fig-a", quantity: 2 },
+            { figureId: "fig-b", quantity: 1 },
+            { figureId: "fig-c", quantity: 1 },
+          ],
+          "order"
+        )
+        expect(notifications).toBe(1)
+      } finally {
+        unsubscribe()
+      }
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 4,
+        created: 3,
+        merged: 0,
+        skipped: [],
+      })
+      const items = [...store.getState().queueItems.values()]
+      expect(items).toHaveLength(3)
+      expect(items.every((qi) => qi.type === "order")).toBe(true)
+      expect(items.find((qi) => qi.figureId === "fig-a")?.quantity).toBe(2)
+      expect(
+        vi
+          .mocked(db.writeStore)
+          .mock.calls.filter((call) => call[0] === "queueItems")
+      ).toHaveLength(1)
+    })
+
+    it("sums duplicate figure lines before applying", () => {
+      seedFigure("fig-a", ["s1"])
+
+      const result = store.getState().addBatchToQueue(
+        [
+          { figureId: "fig-a", quantity: 1 },
+          { figureId: "fig-a", quantity: 2 },
+        ],
+        "order"
+      )
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 3,
+        created: 1,
+        merged: 0,
+        skipped: [],
+      })
+      expect([...store.getState().queueItems.values()][0].quantity).toBe(3)
+    })
+
+    it("an empty batch is a no-op", () => {
+      const before = store.getState().queueItems
+      expect(store.getState().addBatchToQueue([], "order")).toEqual({
+        type: "empty",
+      })
+      expect(store.getState().queueItems).toBe(before)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("skips missing and colorless figures and reports their ids", () => {
+      seedFigure("fig-a", ["s1"])
+      seedFigure("fig-colorless", [])
+
+      const result = store.getState().addBatchToQueue(
+        [
+          { figureId: "fig-a", quantity: 1 },
+          { figureId: "fig-colorless", quantity: 2 },
+          { figureId: "fig-missing", quantity: 3 },
+        ],
+        "order"
+      )
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 1,
+        created: 1,
+        merged: 0,
+        skipped: ["fig-colorless", "fig-missing"],
+      })
+      expect(store.getState().queueItems.size).toBe(1)
+    })
+
+    it("applies the merge rule per entry against existing active entries", () => {
+      seedFigure("fig-a", ["s1"])
+      seedFigure("fig-b", ["s1"])
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-a",
+        type: "order",
+        quantity: 1,
+      })
+      store.setState({ queueItems: new Map([["q1", existing]]) })
+
+      const result = store.getState().addBatchToQueue(
+        [
+          { figureId: "fig-a", quantity: 2 },
+          { figureId: "fig-b", quantity: 1 },
+        ],
+        "order"
+      )
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 3,
+        created: 1,
+        merged: 1,
+        skipped: [],
+      })
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(3)
+      expect(store.getState().queueItems.size).toBe(2)
+    })
+
+    it("a clamped merge counts only the applied delta: 98 + batch of 5 -> 99, pieces 1", () => {
+      seedFigure("fig-a", ["s1"])
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-a",
+        type: "order",
+        quantity: 98,
+      })
+      store.setState({ queueItems: new Map([["q1", existing]]) })
+
+      const result = store
+        .getState()
+        .addBatchToQueue([{ figureId: "fig-a", quantity: 5 }], "order")
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 1,
+        created: 0,
+        merged: 1,
+        skipped: [],
+      })
+      expect(store.getState().queueItems.get("q1")?.quantity).toBe(99)
+    })
+
+    it("a batch of only skipped entries mutates nothing", () => {
+      const before = store.getState().queueItems
+      const result = store
+        .getState()
+        .addBatchToQueue([{ figureId: "fig-missing", quantity: 1 }], "order")
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 0,
+        created: 0,
+        merged: 0,
+        skipped: ["fig-missing"],
+      })
+      expect(store.getState().queueItems).toBe(before)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("queues the sample order: 12 figures, 15 pieces, three entries at ×2", () => {
+      const names = [
+        "hagrid",
+        "silente",
+        "dobby",
+        "minnie",
+        "ash",
+        "misty",
+        "brok",
+        "hulk",
+        "batman",
+        "buzz",
+        "woody",
+        "kratos",
+      ]
+      for (const name of names) seedFigure(`fig-${name}`, ["s1"])
+
+      const entries = names.map((name) => ({
+        figureId: `fig-${name}`,
+        quantity: ["buzz", "woody", "kratos"].includes(name) ? 2 : 1,
+      }))
+
+      const result = store.getState().addBatchToQueue(entries, "order")
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 15,
+        created: 12,
+        merged: 0,
+        skipped: [],
+      })
+      const items = [...store.getState().queueItems.values()]
+      expect(items).toHaveLength(12)
+      expect(items.filter((qi) => qi.quantity === 2)).toHaveLength(3)
+      expect(items.filter((qi) => qi.quantity === 1)).toHaveLength(9)
+    })
+  })
+
+  describe("requeueCompleted", () => {
+    function seedCompleted(quantity = 1) {
+      seedFigure("fig-1", ["s1", "s2"])
+      const q1 = createQueueItem({
+        id: "q1",
+        figureId: "fig-1",
+        type: "order",
+        quantity,
+        completedCounts: { s1: quantity, s2: quantity },
+        completedAt: "2026-08-01T10:00:00.000Z",
+      })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      return q1
+    }
+
+    it("creates a fresh entry at the source's full quantity; the source stays as history", () => {
+      const source = seedCompleted(2)
+
+      const result = store.getState().requeueCompleted("q1")
+
+      expect(result).toEqual({
+        type: "requeued",
+        merged: false,
+        quantity: 2,
+        clamped: false,
+      })
+      const items = [...store.getState().queueItems.values()]
+      expect(items).toHaveLength(2)
+      const fresh = items.find((qi) => qi.id !== "q1")!
+      expect(fresh.figureId).toBe("fig-1")
+      expect(fresh.type).toBe("order")
+      expect(fresh.quantity).toBe(2)
+      expect(fresh.completedCounts).toEqual({})
+      expect(fresh.completedAt).toBeNull()
+      expect(store.getState().queueItems.get("q1")).toEqual(source)
+    })
+
+    it("merges into an existing active same-figure+type entry, counts untouched", () => {
+      seedCompleted(2)
+      const active = createQueueItem({
+        id: "q0",
+        figureId: "fig-1",
+        type: "order",
+        quantity: 1,
+        completedCounts: { s1: 1 },
+      })
+      store.setState({
+        queueItems: new Map([...store.getState().queueItems, ["q0", active]]),
+      })
+
+      const result = store.getState().requeueCompleted("q1")
+
+      expect(result).toEqual({
+        type: "requeued",
+        merged: true,
+        quantity: 3,
+        clamped: false,
+      })
+      expect(store.getState().queueItems.get("q0")?.quantity).toBe(3)
+      expect(store.getState().queueItems.get("q0")?.completedCounts).toEqual({
+        s1: 1,
+      })
+      expect(store.getState().queueItems.size).toBe(2)
+    })
+
+    it("clamps the merge at 99 and reports it", () => {
+      seedCompleted(2)
+      const active = createQueueItem({
+        id: "q0",
+        figureId: "fig-1",
+        type: "order",
+        quantity: 98,
+      })
+      store.setState({
+        queueItems: new Map([...store.getState().queueItems, ["q0", active]]),
+      })
+
+      expect(store.getState().requeueCompleted("q1")).toEqual({
+        type: "requeued",
+        merged: true,
+        quantity: 99,
+        clamped: true,
+      })
+      expect(store.getState().queueItems.get("q0")?.quantity).toBe(99)
+    })
+
+    it("returns not-found for a non-existent queue item", () => {
+      const before = store.getState().queueItems
+      expect(store.getState().requeueCompleted("nonexistent")).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().queueItems).toBe(before)
+    })
+
+    it("returns not-found when the figure is gone (source not complete by derivation)", () => {
+      const q1 = createQueueItem({ id: "q1", figureId: "fig-gone" })
+      store.setState({ queueItems: new Map([["q1", q1]]) })
+      const before = store.getState().queueItems
+      expect(store.getState().requeueCompleted("q1")).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().queueItems).toBe(before)
+    })
   })
 })
 
@@ -774,13 +1418,12 @@ describe("serialization", () => {
     expect(store.getState().dataGeneration).toBe(2)
   })
 
-  it("fromJSON backfills missing completedAt values for older queue items", () => {
+  it("fromJSON backfills v3 defaults (quantity, counts, completedAt) for sparse rows", () => {
     const figure = createFigure()
-    const legacyQueueItem: Omit<QueueItem, "completedAt"> = {
+    const sparseQueueItem: Pick<QueueItem, "id" | "figureId" | "type"> = {
       id: "q1",
       figureId: figure.id,
       type: "stock",
-      completedColors: [],
     }
 
     fromJSON({
@@ -788,13 +1431,14 @@ describe("serialization", () => {
       brands: {},
       figures: { [figure.id]: figure },
       queueItems: {
-        [legacyQueueItem.id]: legacyQueueItem as unknown as QueueItem,
+        [sparseQueueItem.id]: sparseQueueItem as unknown as QueueItem,
       },
     })
 
-    expect(
-      store.getState().queueItems.get(legacyQueueItem.id)?.completedAt
-    ).toBeNull()
+    const hydrated = store.getState().queueItems.get(sparseQueueItem.id)!
+    expect(hydrated.quantity).toBe(1)
+    expect(hydrated.completedCounts).toEqual({})
+    expect(hydrated.completedAt).toBeNull()
   })
 
   it("toJSON → fromJSON roundtrip preserves data", () => {

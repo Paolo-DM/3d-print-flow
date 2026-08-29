@@ -21,6 +21,80 @@ export type DeleteBrandResult =
   | { type: "deleted"; detachedFigureCount: number }
   | { type: "not-found" }
 
+/**
+ * Queue command results — same contract as the brand lifecycle: the store
+ * decides the outcome, the caller decides how to present it.
+ */
+export type AddToQueueResult =
+  | { type: "created" }
+  | { type: "merged"; quantity: number; clamped: boolean }
+  | { type: "rejected" }
+  | { type: "invalid" }
+
+export type SetQuantityResult =
+  | { type: "updated"; completed: boolean }
+  | { type: "not-active" }
+  | { type: "not-found" }
+  | { type: "invalid" }
+
+export type AddBatchResult =
+  | {
+      type: "queued"
+      pieces: number
+      created: number
+      merged: number
+      skipped: string[]
+    }
+  | { type: "empty" }
+
+export type RequeueResult =
+  | { type: "requeued"; merged: boolean; quantity: number; clamped: boolean }
+  | { type: "not-found" }
+
+export const MAX_QUEUE_QUANTITY = 99
+
+/**
+ * Shared quantity guard: non-finite or non-integer input is rejected (null);
+ * integers clamp to 1..99.
+ */
+function normalizeQuantity(quantity: number): number | null {
+  if (!Number.isFinite(quantity) || !Number.isInteger(quantity)) return null
+  return Math.max(1, Math.min(MAX_QUEUE_QUANTITY, quantity))
+}
+
+/**
+ * Canonical `completedAt` rule, applied after every mutation that touches
+ * counts, quantity, or a figure's `requiredColors`:
+ * `isComplete ? (existing.completedAt ?? now) : null`.
+ */
+function deriveCompletedAt(
+  item: QueueItem,
+  figure: Figure | null | undefined
+): string | null {
+  return computeCompletionStatus(item, figure)
+    ? (item.completedAt ?? new Date().toISOString())
+    : null
+}
+
+/**
+ * Merge target per CAP-6: the *active* (not complete by derivation) entry with
+ * the same figure+type and the smallest id, or null when none exists.
+ */
+function findMergeTarget(
+  queueItems: Map<string, QueueItem>,
+  figures: Map<string, Figure>,
+  figureId: string,
+  type: "stock" | "order"
+): QueueItem | null {
+  let target: QueueItem | null = null
+  for (const qi of queueItems.values()) {
+    if (qi.figureId !== figureId || qi.type !== type) continue
+    if (computeCompletionStatus(qi, figures.get(figureId))) continue
+    if (!target || qi.id < target.id) target = qi
+  }
+  return target
+}
+
 // Module-level flag — NOT in store state (avoids re-renders)
 let _persist = true
 
@@ -62,10 +136,39 @@ interface PrintFlowState {
   createFigure: (data: Omit<Figure, "id">) => void
   updateFigure: (id: string, updates: Partial<Omit<Figure, "id">>) => void
   deleteFigure: (id: string) => void
-  addToQueue: (figureId: string, type: "stock" | "order") => void
+  /**
+   * Queue `quantity` copies of a figure (default 1). Merges into the active
+   * same-figure+type entry when one exists (smallest id wins, counts
+   * untouched, quantity clamped at 99); otherwise creates a fresh entry.
+   */
+  addToQueue: (
+    figureId: string,
+    type: "stock" | "order",
+    quantity?: number
+  ) => AddToQueueResult
+  /**
+   * Queue a whole order in one `set()`. Duplicate figure lines are summed
+   * before applying; entries with a missing/colorless figure or invalid
+   * quantity are skipped and reported.
+   */
+  addBatchToQueue: (
+    entries: { figureId: string; quantity: number }[],
+    type: "stock" | "order"
+  ) => AddBatchResult
+  /**
+   * Adjust an *active* entry's quantity (integers clamp 1..99). Lowering
+   * clamps any completed count above the new quantity and may complete the
+   * entry.
+   */
+  setQuantity: (queueItemId: string, quantity: number) => SetQuantityResult
   removeFromQueue: (id: string) => void
+  /** Advance a color's count by one copy, cycling past full back to 0. */
   toggleChip: (queueItemId: string, spoolId: string) => void
-  requeueCompleted: (queueItemId: string) => void
+  /**
+   * Restore a completed entry's full quantity to the queue via the merge
+   * rule; the completed source entry stays untouched as history.
+   */
+  requeueCompleted: (queueItemId: string) => RequeueResult
 }
 
 export const store = createStore<PrintFlowState>((set, get) => ({
@@ -174,9 +277,25 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     set((state) => {
       const existing = state.figures.get(id)
       if (!existing) return state
-      const next = new Map(state.figures)
-      next.set(id, { ...existing, ...updates })
-      return { figures: next }
+      const nextFigure = { ...existing, ...updates }
+      const nextFigures = new Map(state.figures)
+      nextFigures.set(id, nextFigure)
+
+      // A requiredColors change can complete or un-complete referencing
+      // queue items — re-derive their completedAt in the same set().
+      if (updates.requiredColors === undefined) return { figures: nextFigures }
+
+      let nextQueue: Map<string, QueueItem> | null = null
+      for (const [qid, qi] of state.queueItems) {
+        if (qi.figureId !== id) continue
+        const completedAt = deriveCompletedAt(qi, nextFigure)
+        if (completedAt === qi.completedAt) continue
+        if (!nextQueue) nextQueue = new Map(state.queueItems)
+        nextQueue.set(qid, { ...qi, completedAt })
+      }
+      return nextQueue
+        ? { figures: nextFigures, queueItems: nextQueue }
+        : { figures: nextFigures }
     })
   },
 
@@ -193,19 +312,142 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     })
   },
 
-  addToQueue(figureId, type) {
-    set((state) => {
-      const id = crypto.randomUUID()
-      const next = new Map(state.queueItems)
-      next.set(id, {
-        id,
-        figureId,
-        type,
-        completedColors: [],
-        completedAt: null,
+  addToQueue(figureId, type, quantity = 1) {
+    const normalized = normalizeQuantity(quantity)
+    if (normalized === null) return { type: "invalid" }
+
+    const { figures, queueItems } = get()
+    const figure = figures.get(figureId)
+    if (!figure || figure.requiredColors.length === 0) {
+      return { type: "rejected" }
+    }
+
+    const next = new Map(queueItems)
+    const target = findMergeTarget(queueItems, figures, figureId, type)
+    if (target) {
+      const mergedQuantity = Math.min(
+        target.quantity + normalized,
+        MAX_QUEUE_QUANTITY
+      )
+      const clamped = target.quantity + normalized > MAX_QUEUE_QUANTITY
+      const updated: QueueItem = { ...target, quantity: mergedQuantity }
+      next.set(target.id, {
+        ...updated,
+        completedAt: deriveCompletedAt(updated, figure),
       })
-      return { queueItems: next }
+      set({ queueItems: next })
+      return { type: "merged", quantity: mergedQuantity, clamped }
+    }
+
+    const id = crypto.randomUUID()
+    next.set(id, {
+      id,
+      figureId,
+      type,
+      quantity: normalized,
+      completedCounts: {},
+      completedAt: null,
     })
+    set({ queueItems: next })
+    return { type: "created" }
+  },
+
+  addBatchToQueue(entries, type) {
+    if (entries.length === 0) return { type: "empty" }
+
+    // Pre-pass: sum duplicate figure lines before applying anything.
+    const summed = new Map<string, number>()
+    for (const entry of entries) {
+      summed.set(
+        entry.figureId,
+        (summed.get(entry.figureId) ?? 0) + entry.quantity
+      )
+    }
+
+    const { figures, queueItems } = get()
+    const next = new Map(queueItems)
+    const skipped: string[] = []
+    let pieces = 0
+    let created = 0
+    let merged = 0
+
+    for (const [figureId, rawQuantity] of summed) {
+      const normalized = normalizeQuantity(rawQuantity)
+      const figure = figures.get(figureId)
+      if (
+        normalized === null ||
+        !figure ||
+        figure.requiredColors.length === 0
+      ) {
+        skipped.push(figureId)
+        continue
+      }
+
+      const target = findMergeTarget(next, figures, figureId, type)
+      if (target) {
+        const mergedQuantity = Math.min(
+          target.quantity + normalized,
+          MAX_QUEUE_QUANTITY
+        )
+        const updated: QueueItem = { ...target, quantity: mergedQuantity }
+        next.set(target.id, {
+          ...updated,
+          completedAt: deriveCompletedAt(updated, figure),
+        })
+        merged += 1
+        // pieces counts copies actually applied — a clamped merge adds only
+        // the delta that landed, not the requested amount.
+        pieces += mergedQuantity - target.quantity
+      } else {
+        const id = crypto.randomUUID()
+        next.set(id, {
+          id,
+          figureId,
+          type,
+          quantity: normalized,
+          completedCounts: {},
+          completedAt: null,
+        })
+        created += 1
+        pieces += normalized
+      }
+    }
+
+    // One set() for the whole batch; skip it when nothing was applied.
+    if (created > 0 || merged > 0) set({ queueItems: next })
+    return { type: "queued", pieces, created, merged, skipped }
+  },
+
+  setQuantity(queueItemId, quantity) {
+    const normalized = normalizeQuantity(quantity)
+    if (normalized === null) return { type: "invalid" }
+
+    const { figures, queueItems } = get()
+    const existing = queueItems.get(queueItemId)
+    if (!existing) return { type: "not-found" }
+    const figure = figures.get(existing.figureId)
+    if (computeCompletionStatus(existing, figure)) return { type: "not-active" }
+
+    // Lowering clamps any completed count above the new quantity.
+    const completedCounts = Object.fromEntries(
+      Object.entries(existing.completedCounts).map(([spoolId, count]) => [
+        spoolId,
+        Math.min(count, normalized),
+      ])
+    )
+    const updated: QueueItem = {
+      ...existing,
+      quantity: normalized,
+      completedCounts,
+    }
+    const completed = computeCompletionStatus(updated, figure)
+    const next = new Map(queueItems)
+    next.set(queueItemId, {
+      ...updated,
+      completedAt: deriveCompletedAt(updated, figure),
+    })
+    set({ queueItems: next })
+    return { type: "updated", completed }
   },
 
   removeFromQueue(id) {
@@ -222,45 +464,80 @@ export const store = createStore<PrintFlowState>((set, get) => ({
       const existing = state.queueItems.get(queueItemId)
       if (!existing) return state
       const figure = state.figures.get(existing.figureId)
-      const completedColors = existing.completedColors.includes(spoolId)
-        ? existing.completedColors.filter((c) => c !== spoolId)
-        : [...existing.completedColors, spoolId]
-      const previousItem = existing
-      const nextItem = {
+      // Guard: taps on a spool outside the figure's requiredColors (or with
+      // the figure missing) never mutate.
+      if (!figure || !figure.requiredColors.includes(spoolId)) return state
+
+      const count = existing.completedCounts[spoolId] ?? 0
+      const nextCount = (count + 1) % (existing.quantity + 1)
+      const nextItem: QueueItem = {
         ...existing,
-        completedColors,
+        completedCounts: {
+          ...existing.completedCounts,
+          [spoolId]: nextCount,
+        },
       }
-      const wasComplete = computeCompletionStatus(previousItem, figure)
-      const isComplete = computeCompletionStatus(nextItem, figure)
-      const completedAt =
-        !wasComplete && isComplete
-          ? new Date().toISOString()
-          : wasComplete && !isComplete
-            ? null
-            : existing.completedAt
       const next = new Map(state.queueItems)
-      next.set(queueItemId, { ...nextItem, completedAt })
+      next.set(queueItemId, {
+        ...nextItem,
+        completedAt: deriveCompletedAt(nextItem, figure),
+      })
       return { queueItems: next }
     })
   },
 
   requeueCompleted(queueItemId) {
-    set((state) => {
-      const existing = state.queueItems.get(queueItemId)
-      if (!existing) return state
-      const figure = state.figures.get(existing.figureId)
-      if (!figure) return state
-      const id = crypto.randomUUID()
-      const next = new Map(state.queueItems)
-      next.set(id, {
-        id,
-        figureId: existing.figureId,
-        type: existing.type,
-        completedColors: [],
-        completedAt: null,
+    const { figures, queueItems } = get()
+    const source = queueItems.get(queueItemId)
+    if (!source) return { type: "not-found" }
+    const figure = figures.get(source.figureId)
+    // Only a complete-by-derivation entry can be requeued; the source stays
+    // untouched as history.
+    if (!computeCompletionStatus(source, figure)) return { type: "not-found" }
+
+    const next = new Map(queueItems)
+    const target = findMergeTarget(
+      queueItems,
+      figures,
+      source.figureId,
+      source.type
+    )
+    if (target) {
+      const mergedQuantity = Math.min(
+        target.quantity + source.quantity,
+        MAX_QUEUE_QUANTITY
+      )
+      const clamped = target.quantity + source.quantity > MAX_QUEUE_QUANTITY
+      const updated: QueueItem = { ...target, quantity: mergedQuantity }
+      next.set(target.id, {
+        ...updated,
+        completedAt: deriveCompletedAt(updated, figure),
       })
-      return { queueItems: next }
+      set({ queueItems: next })
+      return {
+        type: "requeued",
+        merged: true,
+        quantity: mergedQuantity,
+        clamped,
+      }
+    }
+
+    const id = crypto.randomUUID()
+    next.set(id, {
+      id,
+      figureId: source.figureId,
+      type: source.type,
+      quantity: source.quantity,
+      completedCounts: {},
+      completedAt: null,
     })
+    set({ queueItems: next })
+    return {
+      type: "requeued",
+      merged: false,
+      quantity: source.quantity,
+      clamped: false,
+    }
   },
 }))
 
@@ -320,6 +597,8 @@ export function fromJSON(data: {
       id,
       {
         ...queueItem,
+        quantity: queueItem.quantity ?? 1,
+        completedCounts: queueItem.completedCounts ?? {},
         completedAt: queueItem.completedAt ?? null,
       },
     ])

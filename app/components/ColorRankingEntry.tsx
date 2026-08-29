@@ -5,6 +5,7 @@ import { getPerceivedLightness } from "~/lib/color-utils"
 import {
   computeCompletionStatus,
   computeFigureProgress,
+  computeOutstandingCopies,
   type ColorRankingEntry as ColorRankingEntryType,
 } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
@@ -19,6 +20,7 @@ import {
 import { Progress } from "~/components/ui/progress"
 import { Separator } from "~/components/ui/separator"
 import { ColorChip } from "~/components/ColorChip"
+import { QuantityBadge } from "~/components/QuantityBadge"
 import type { CompletionPhase } from "~/components/QueueItemCard"
 
 interface ColorRankingEntryProps {
@@ -97,7 +99,7 @@ export function ColorRankingEntry({
       if (!figure) return false
       if (!figure.requiredColors.includes(currentSpoolId)) return false
       return (
-        !qi.completedColors.includes(currentSpoolId) ||
+        computeOutstandingCopies(qi, currentSpoolId) > 0 ||
         completionPhases.has(qi.id)
       )
     })
@@ -117,7 +119,7 @@ export function ColorRankingEntry({
         <button
           type="button"
           className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-all duration-200 hover:bg-muted/60"
-          aria-label={`${entry.spool.name}: ${entry.count} figure${entry.count === 1 ? "" : "s"} remaining, ${open ? "collapse" : "expand"}`}
+          aria-label={`${entry.spool.name}: ${entry.count} ${entry.count === 1 ? "copy" : "copies"} remaining, ${open ? "collapse" : "expand"}`}
           data-testid="color-ranking-entry"
         >
           <span className="w-6 text-center text-base font-bold text-muted-foreground tabular-nums">
@@ -136,7 +138,9 @@ export function ColorRankingEntry({
           <span className="min-w-0 flex-1">
             <span className="text-base font-semibold">{entry.spool.name}</span>
           </span>
-          <span className="text-xs text-muted-foreground">figures</span>
+          <span className="text-xs text-muted-foreground">
+            {entry.count === 1 ? "copy" : "copies"}
+          </span>
           {entry.hasOrders ? (
             <Badge className="bg-order-muted text-order">Order</Badge>
           ) : null}
@@ -198,9 +202,12 @@ export function ColorRankingEntry({
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {figure.name}
-                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <p className="truncate text-sm font-medium">
+                          {figure.name}
+                        </p>
+                        <QuantityBadge quantity={qi.quantity} />
+                      </div>
                       {brandName ? (
                         <p className="truncate text-xs text-muted-foreground">
                           {brandName}
@@ -228,7 +235,8 @@ export function ColorRankingEntry({
                         <ColorChip
                           key={`${qi.id}-${spoolId}`}
                           spool={spool}
-                          isCompleted={qi.completedColors.includes(spoolId)}
+                          count={qi.completedCounts[spoolId] ?? 0}
+                          quantity={qi.quantity}
                           isCurrent={spoolId === currentSpoolId}
                           onClick={() => toggleChip(qi.id, spoolId)}
                         />

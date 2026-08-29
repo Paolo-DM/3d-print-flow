@@ -22,6 +22,13 @@ export interface QueueItem {
   id: string
   figureId: string
   type: "stock" | "order"
-  completedColors: string[]
+  /** Integer 1..99 — copies of the figure this entry represents. */
+  quantity: number
+  /**
+   * spoolId -> copies printed in that color, 0..quantity. A missing key reads
+   * as 0; keys outside the figure's `requiredColors` are tolerated on read and
+   * ignored by every derived computation.
+   */
+  completedCounts: Record<string, number>
   completedAt: string | null
 }

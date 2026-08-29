@@ -68,7 +68,7 @@ describe("QueueLayout", () => {
     const qi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
 
     store.setState({
@@ -120,13 +120,13 @@ describe("QueueLayout", () => {
     const completedToday = createQueueItem({
       id: "q1",
       figureId: figure.id,
-      completedColors: ["s1"],
+      completedCounts: { s1: 1 },
       completedAt: completedTodayAt,
     })
     const completedYesterday = createQueueItem({
       id: "q2",
       figureId: figure.id,
-      completedColors: ["s1"],
+      completedCounts: { s1: 1 },
       completedAt: completedYesterdayAt,
     })
 

@@ -93,7 +93,7 @@ describe("ColorView route", () => {
   it("renders all-complete empty state when queue items exist but all completed", async () => {
     const spool = createSpool({ id: "s1" })
     const figure = createFigure({ id: "f1", requiredColors: ["s1"] })
-    const qi = createQueueItem({ figureId: "f1", completedColors: ["s1"] })
+    const qi = createQueueItem({ figureId: "f1", completedCounts: { s1: 1 } })
     store.setState({
       spools: new Map([["s1", spool]]),
       figures: new Map([["f1", figure]]),
@@ -111,7 +111,7 @@ describe("ColorView route", () => {
       name: "Naruto",
       requiredColors: ["s1"],
     })
-    const qi = createQueueItem({ figureId: "f1", completedColors: [] })
+    const qi = createQueueItem({ figureId: "f1", completedCounts: {} })
     store.setState({
       spools: new Map([["s1", spool]]),
       figures: new Map([["f1", figure]]),
@@ -128,8 +128,8 @@ describe("ColorView route", () => {
     const spool2 = createSpool({ id: "s2", name: "Blue PLA", hex: "#0000FF" })
     const figure1 = createFigure({ id: "f1", requiredColors: ["s1", "s2"] })
     const figure2 = createFigure({ id: "f2", requiredColors: ["s1"] })
-    const qi1 = createQueueItem({ figureId: "f1", completedColors: [] })
-    const qi2 = createQueueItem({ figureId: "f2", completedColors: [] })
+    const qi1 = createQueueItem({ figureId: "f1", completedCounts: {} })
+    const qi2 = createQueueItem({ figureId: "f2", completedCounts: {} })
     store.setState({
       spools: new Map([
         ["s1", spool1],
@@ -177,12 +177,12 @@ describe("ColorView route", () => {
     const narutoQueueItem = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
     const sasukeQueueItem = createQueueItem({
       id: "q2",
       figureId: "f2",
-      completedColors: [],
+      completedCounts: {},
     })
 
     store.setState({
@@ -240,7 +240,7 @@ describe("ColorView route", () => {
     const qi = createQueueItem({
       figureId: "f1",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
     store.setState({
       spools: new Map([["s1", spool]]),
@@ -263,7 +263,7 @@ describe("ColorView route", () => {
     const qi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
     store.setState({
       spools: new Map([["s1", spool]]),
@@ -291,12 +291,12 @@ describe("ColorView route", () => {
     const stockQi = createQueueItem({
       figureId: "f1",
       type: "stock",
-      completedColors: [],
+      completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
       type: "order",
-      completedColors: [],
+      completedCounts: {},
     })
     store.setState({
       spools: new Map([["s1", spool]]),
@@ -333,7 +333,7 @@ describe("ColorView route", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      completedColors: [],
+      completedCounts: {},
     })
 
     store.setState({

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 import { computeCompletionStatus } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
@@ -18,6 +19,7 @@ import {
 } from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
 import { ColorChip } from "~/components/ColorChip"
+import { QuantityBadge } from "~/components/QuantityBadge"
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,6 +38,7 @@ function CompletedArchiveItem({
   figureName,
   brandName,
   requiredColors,
+  quantity,
   completedAt,
   spools,
   onRequeue,
@@ -45,6 +48,7 @@ function CompletedArchiveItem({
   figureName: string
   brandName: string | null
   requiredColors: string[]
+  quantity: number
   completedAt: string | null
   spools: Map<string, Spool>
   onRequeue: (queueItemId: string) => void
@@ -62,7 +66,10 @@ function CompletedArchiveItem({
             aria-label={`View details for ${figureName}`}
           >
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{figureName}</p>
+              <p className="flex items-baseline gap-1.5 text-sm font-medium">
+                {figureName}
+                <QuantityBadge quantity={quantity} />
+              </p>
               {brandName ? (
                 <p className="text-xs text-muted-foreground">{brandName}</p>
               ) : null}
@@ -95,7 +102,8 @@ function CompletedArchiveItem({
                   <ColorChip
                     key={`${queueItemId}-${spoolId}`}
                     spool={spool}
-                    isCompleted={true}
+                    count={quantity}
+                    quantity={quantity}
                   />
                 )
               })}
@@ -167,6 +175,35 @@ export default function Completed() {
       return b.completedAt.localeCompare(a.completedAt)
     })
 
+  function handleRequeue(queueItemId: string) {
+    const source = queueItems.get(queueItemId)
+    const figureName = source
+      ? (figures.get(source.figureId)?.name ?? "Figure")
+      : "Figure"
+    const result = requeueCompleted(queueItemId)
+    switch (result.type) {
+      case "requeued": {
+        const qtyLabel = result.quantity > 1 ? ` ×${result.quantity}` : ""
+        // merged: target ≥1 + completed source ≥1 ⇒ quantity ≥2, always ×N
+        toast.success(
+          result.merged
+            ? `Merged into queue: ${figureName} now${qtyLabel}${
+                result.clamped ? " (capped at 99)" : ""
+              }`
+            : `${figureName}${qtyLabel} back in queue`
+        )
+        return
+      }
+      case "not-found":
+        toast.error("Couldn't requeue — this entry is no longer available.")
+        return
+      default: {
+        const exhaustive: never = result
+        return exhaustive
+      }
+    }
+  }
+
   return (
     <div className="p-4 lg:p-6">
       <h1 className="mb-4 text-2xl font-bold">Completed</h1>
@@ -199,9 +236,10 @@ export default function Completed() {
                     : null
                 }
                 requiredColors={figure.requiredColors}
+                quantity={qi.quantity}
                 completedAt={qi.completedAt}
                 spools={spools}
-                onRequeue={requeueCompleted}
+                onRequeue={handleRequeue}
                 onRemove={removeFromQueue}
               />
             )

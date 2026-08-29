@@ -1,7 +1,7 @@
-import { Trash2 } from "lucide-react"
+import { Minus, Plus, Trash2 } from "lucide-react"
 
-import { usePrintFlowStore } from "~/lib/store"
-import { computeFigureProgress } from "~/lib/derived"
+import { MAX_QUEUE_QUANTITY, usePrintFlowStore } from "~/lib/store"
+import { computeCompletionStatus, computeFigureProgress } from "~/lib/derived"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import {
@@ -19,6 +19,7 @@ import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Progress } from "~/components/ui/progress"
 import { ColorChip } from "~/components/ColorChip"
+import { QuantityBadge } from "~/components/QuantityBadge"
 
 export type CompletionPhase = "pulsing" | "collapsing"
 
@@ -40,8 +41,12 @@ export function QueueItemCard({
   onCompletionPhaseEnd,
 }: QueueItemCardProps) {
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
+  const setQuantity = usePrintFlowStore((s) => s.setQuantity)
   const removeFromQueue = usePrintFlowStore((s) => s.removeFromQueue)
   const progress = computeFigureProgress(queueItem, figure)
+  // During the completion pulse/collapse window the entry is complete by
+  // derivation and setQuantity would answer not-active — freeze the stepper.
+  const isComplete = computeCompletionStatus(queueItem, figure)
   const brandName =
     figure.brandId !== null ? brands.get(figure.brandId)?.name : undefined
   const missingSpoolCount = figure.requiredColors.filter(
@@ -69,7 +74,10 @@ export function QueueItemCard({
     >
       <div className="flex items-baseline justify-between gap-2">
         <div>
-          <p className="truncate text-sm font-medium">{figure.name}</p>
+          <div className="flex items-baseline gap-1.5">
+            <p className="truncate text-sm font-medium">{figure.name}</p>
+            <QuantityBadge quantity={queueItem.quantity} />
+          </div>
           {brandName ? (
             <p className="truncate text-xs text-muted-foreground">
               {brandName}
@@ -125,7 +133,8 @@ export function QueueItemCard({
             <ColorChip
               key={`${queueItem.id}-${spoolId}`}
               spool={spool}
-              isCompleted={queueItem.completedColors.includes(spoolId)}
+              count={queueItem.completedCounts[spoolId] ?? 0}
+              quantity={queueItem.quantity}
               onClick={() => toggleChip(queueItem.id, spoolId)}
             />
           )
@@ -137,11 +146,50 @@ export function QueueItemCard({
           {missingSpoolCount === 1 ? "" : "s"} for this figure.
         </p>
       ) : null}
-      <div className="mt-auto flex items-center gap-2">
-        <Progress value={percentage} className="flex-1" />
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {progress.completed}/{progress.total}
-        </span>
+      <div className="mt-auto flex items-center justify-between gap-2">
+        <div
+          className="flex items-center gap-1"
+          role="group"
+          aria-label={`Quantity for ${figure.name}`}
+        >
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-11 rounded-full"
+            aria-label={`Decrease quantity of ${figure.name}`}
+            disabled={isComplete}
+            onClick={() => {
+              // − at 1 does nothing: removal stays the trash + dialog flow.
+              if (queueItem.quantity > 1) {
+                setQuantity(queueItem.id, queueItem.quantity - 1)
+              }
+            }}
+          >
+            <Minus className="size-3.5" />
+          </Button>
+          <span
+            className="min-w-[3ch] text-center text-sm font-medium tabular-nums"
+            data-testid="quantity-value"
+          >
+            ×{queueItem.quantity}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-11 rounded-full"
+            aria-label={`Increase quantity of ${figure.name}`}
+            disabled={queueItem.quantity >= MAX_QUEUE_QUANTITY || isComplete}
+            onClick={() => setQuantity(queueItem.id, queueItem.quantity + 1)}
+          >
+            <Plus className="size-3.5" />
+          </Button>
+        </div>
+        <div className="flex flex-1 items-center gap-2">
+          <Progress value={percentage} className="flex-1" />
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {progress.completed}/{progress.total}
+          </span>
+        </div>
       </div>
     </div>
   )

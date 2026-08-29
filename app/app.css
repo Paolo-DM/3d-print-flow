@@ -10,6 +10,7 @@
   --font-sans: "Inter Variable", sans-serif;
   --animate-completion-pulse: completion-pulse 500ms ease-out 150ms both;
   --animate-completion-collapse: completion-collapse 300ms ease-out forwards;
+  --animate-chip-reset: chip-reset 400ms ease-out both;
   --animate-fade-in-up: fade-in-up 400ms ease-out both;
   --animate-slide-in: slide-in 300ms ease-out both;
   --color-stat-queue: var(--stat-queue);
@@ -186,6 +187,23 @@
   }
 }
 
+/* Cycling a chip past full resets it to 0 — visually distinct from an
+   increment so an accidental reset is noticed. */
+@keyframes chip-reset {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 3px var(--color-destructive);
+    transform: scale(0.92);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -206,6 +224,7 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-completion-pulse,
   .animate-completion-collapse,
+  .animate-chip-reset,
   .animate-fade-in-up,
   .animate-slide-in {
     animation: none !important;

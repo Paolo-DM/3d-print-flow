@@ -3,6 +3,8 @@ import { toast } from "sonner"
 
 import {
   isValidFigureV1,
+  isValidQueueItemLegacy,
+  migrateLegacyQueueItem,
   migrateV1Figures,
   type FigureV1,
 } from "~/lib/migration"
@@ -38,7 +40,7 @@ let dbPromise: Promise<IDBPDatabase<PrintFlowDB>> | null = null
 
 function getDB() {
   if (!dbPromise) {
-    const opening = openDB<PrintFlowDB>("print-flow", 2, {
+    const opening = openDB<PrintFlowDB>("print-flow", 3, {
       async upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           db.createObjectStore("spools", { keyPath: "id" })
@@ -92,6 +94,22 @@ function getDB() {
           }
           for (const figure of Object.values(figures)) {
             await figureStore.put(figure)
+          }
+        }
+        if (oldVersion === 1 || oldVersion === 2) {
+          // Schema v3 queue mapping, in the same versionchange transaction:
+          // legacy rows become quantity 1 with completed colors as counts of 1
+          // and completedAt preserved verbatim. Rows are read as unknown and
+          // narrowed through the legacy guard — rows failing it are deleted,
+          // never left in old shape to hydrate as v3. Pre-existing duplicate
+          // rows are preserved one-for-one, never consolidated.
+          const queueStore = tx.objectStore("queueItems")
+          const rows: unknown[] = await queueStore.getAll()
+          await queueStore.clear()
+          for (const row of rows) {
+            if (isValidQueueItemLegacy(row)) {
+              await queueStore.put(migrateLegacyQueueItem(row))
+            }
           }
         }
       },
