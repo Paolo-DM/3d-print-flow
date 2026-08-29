@@ -11,7 +11,7 @@ describe("ColorChip", () => {
   it("renders pending state with muted background and spool name", () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
     const { container } = render(
-      <ColorChip spool={spool} isCompleted={false} />,
+      <ColorChip spool={spool} isCompleted={false} />
     )
 
     expect(screen.getByText("Red PLA")).toBeTruthy()
@@ -21,19 +21,19 @@ describe("ColorChip", () => {
 
   it("renders completed state with spool hex background", () => {
     const spool = createSpool({ name: "Blue PLA", hex: "#0000FF" })
-    const { container } = render(
-      <ColorChip spool={spool} isCompleted={true} />,
-    )
+    const { container } = render(<ColorChip spool={spool} isCompleted={true} />)
 
     expect(screen.getByText("Blue PLA")).toBeTruthy()
     const chip = container.firstElementChild as HTMLElement
     expect(chip.style.backgroundColor).toBe("rgb(0, 0, 255)")
+    expect(chip.className).toContain("border-foreground/75")
+    expect(container.querySelector(".lucide-check")).toBeTruthy()
   })
 
   it("renders pulsing outline when isCurrent and pending", () => {
     const spool = createSpool({ name: "Green PLA", hex: "#00FF00" })
     const { container } = render(
-      <ColorChip spool={spool} isCompleted={false} isCurrent />,
+      <ColorChip spool={spool} isCompleted={false} isCurrent />
     )
 
     const chip = container.firstElementChild as HTMLElement
@@ -44,21 +44,22 @@ describe("ColorChip", () => {
   it("does not render pulsing outline when not isCurrent", () => {
     const spool = createSpool({ name: "Green PLA", hex: "#00FF00" })
     const { container } = render(
-      <ColorChip spool={spool} isCompleted={false} />,
+      <ColorChip spool={spool} isCompleted={false} />
     )
 
     const chip = container.firstElementChild as HTMLElement
     expect(chip.className).not.toContain("animate-pulse")
   })
 
-  it("applies border for near-white spool in pending state", () => {
-    const spool = createSpool({ name: "White PLA", hex: "#FFFFFF" })
+  it("outlines the spool swatch in pending state regardless of its color", () => {
+    const spool = createSpool({ name: "Black PLA", hex: "#000000" })
     const { container } = render(
-      <ColorChip spool={spool} isCompleted={false} />,
+      <ColorChip spool={spool} isCompleted={false} />
     )
 
-    const dot = container.querySelector(".rounded-full.opacity-40") as HTMLElement
-    expect(dot.className).toContain("border")
+    const dot = container.querySelector("span[style]") as HTMLElement
+    expect(dot.className).toContain("ring-foreground/30")
+    expect(dot.style.backgroundColor).toBe("rgb(0, 0, 0)")
   })
 
   it("renders role=switch with aria-checked=false when pending", () => {
@@ -80,7 +81,9 @@ describe("ColorChip", () => {
   it("calls onClick handler when clicked", () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
     const handleClick = vi.fn()
-    render(<ColorChip spool={spool} isCompleted={false} onClick={handleClick} />)
+    render(
+      <ColorChip spool={spool} isCompleted={false} onClick={handleClick} />
+    )
 
     fireEvent.click(screen.getByRole("switch"))
     expect(handleClick).toHaveBeenCalledOnce()

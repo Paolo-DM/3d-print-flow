@@ -41,6 +41,10 @@ describe("hexToContrast", () => {
     expect(hexToContrast("#000080")).toBe("#FFFFFF")
   })
 
+  it("returns dark color for saturated red because it has higher contrast", () => {
+    expect(hexToContrast("#FF0000")).toBe("#000000")
+  })
+
   it("returns dark color for yellow", () => {
     expect(hexToContrast("#FFFF00")).toBe("#000000")
   })

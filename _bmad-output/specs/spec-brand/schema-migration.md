@@ -49,7 +49,7 @@ Applied identically in v1 import migration, live IndexedDB migration, and inline
 ## Import version dispatch
 
 - `version: 1` → validate v1 entity shapes (existing guards) → derive brands per the rule above → proceed as v2 data.
-- `version: 2` → validate v2 entity shapes (brands record; figures with `brandId` string-or-null). A v2 figure carrying a stray `franchise` property is not an error: the field is stripped at import, never persisted or re-exported.
+- `version: 2` → validate v2 entity shapes (brands record; figures with `brandId` string-or-null). A v2 figure carrying a stray `franchise` property is not an error: the field is stripped at import, never persisted or re-exported. *Amended 2026-08-28 by `../spec-brand-lifecycle/SPEC.md` CAP-6: v2 brand collections containing a blank/whitespace-only name, or two brands sharing a brandKey (trimmed lowercased name), are additionally rejected with the same invalid-format error.*
 - Any other `version` → reject with the existing invalid-format error message.
 - Both paths land via the same atomic full-replace transaction across all object stores; rollback on failure preserves current data.
 - No referential-integrity validation: an unresolvable `brandId` is imported as-is and rendered as brandless.

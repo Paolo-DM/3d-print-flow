@@ -24,9 +24,14 @@ export function getPerceivedLightness(hex: string): number {
 }
 
 /**
- * Returns a text color (dark or light) suitable for display on the given background hex.
- * Threshold: lightness > 0.5 → dark text, else light text.
+ * Returns whichever of black or white has the higher WCAG contrast ratio
+ * against the given background hex. The crossover point is approximately
+ * 0.179 relative luminance.
  */
 export function hexToContrast(hex: string): string {
-  return getPerceivedLightness(hex) > 0.5 ? "#000000" : "#FFFFFF"
+  const lightness = getPerceivedLightness(hex)
+  const contrastWithBlack = (lightness + 0.05) / 0.05
+  const contrastWithWhite = 1.05 / (lightness + 0.05)
+
+  return contrastWithBlack >= contrastWithWhite ? "#000000" : "#FFFFFF"
 }
