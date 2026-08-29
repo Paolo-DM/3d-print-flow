@@ -61,6 +61,18 @@ function renderSidebar(initialPath = "/") {
 }
 
 describe("AppSidebar", () => {
+  it("renders the Flow Spool brand logo", () => {
+    renderSidebar()
+
+    const homeLink = screen.getByRole("link", { name: "3D Print Flow home" })
+
+    expect(homeLink.getAttribute("href")).toBe("/")
+    expect(homeLink.querySelector("img")?.getAttribute("src")).toBe(
+      "/brand/flow-spool-logo.png"
+    )
+    expect(screen.getByText("3D Print Flow")).toBeTruthy()
+  })
+
   it("renders Library and Archive section labels", () => {
     renderSidebar()
 

@@ -5,7 +5,6 @@ import {
   CheckCircle,
   Disc3,
   Download,
-  Layers,
   LayoutDashboard,
   Upload,
 } from "lucide-react"
@@ -76,12 +75,25 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <Layers className="size-5 shrink-0 text-primary" />
-          <span className="font-heading text-sm font-bold tracking-tight group-data-[collapsible=icon]:hidden">
-            PrintFlow
+        <NavLink
+          to="/"
+          aria-label="3D Print Flow home"
+          className="flex items-center gap-2 rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        >
+          <img
+            src="/brand/flow-spool-logo.png"
+            alt=""
+            width={24}
+            height={24}
+            className="size-6 shrink-0 object-contain dark:brightness-0 dark:invert"
+          />
+          <span
+            aria-hidden="true"
+            className="font-heading text-sm font-bold tracking-tight group-data-[collapsible=icon]:hidden"
+          >
+            3D Print Flow
           </span>
-        </div>
+        </NavLink>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

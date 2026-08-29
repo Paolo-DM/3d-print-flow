@@ -21,8 +21,28 @@ import {
 import { TooltipProvider } from "~/components/ui/tooltip"
 import { initApp } from "~/lib/init"
 import { type Theme, themeCookie } from "~/lib/theme.server"
-import { Layers } from "lucide-react"
 import "./app.css"
+
+export const meta: Route.MetaFunction = () => [{ title: "3D Print Flow" }]
+
+export const links: Route.LinksFunction = () => [
+  {
+    rel: "icon",
+    href: "/favicon.ico",
+    sizes: "16x16 32x32 48x48",
+  },
+  {
+    rel: "icon",
+    type: "image/png",
+    sizes: "32x32",
+    href: "/favicon-32x32.png",
+  },
+  {
+    rel: "apple-touch-icon",
+    sizes: "180x180",
+    href: "/apple-touch-icon.png",
+  },
+]
 
 export async function loader({ request }: Route.LoaderArgs) {
   const raw = await themeCookie.parse(request.headers.get("Cookie"))
@@ -46,8 +66,19 @@ clientLoader.hydrate = true as const
 
 export function HydrateFallback() {
   return (
-    <div className="flex h-screen items-center justify-center">
-      <Layers className="size-6 animate-pulse text-primary" />
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex h-screen items-center justify-center"
+    >
+      <img
+        src="/brand/flow-spool-logo.png"
+        alt=""
+        width={32}
+        height={32}
+        className="size-8 animate-pulse object-contain motion-reduce:animate-none dark:brightness-0 dark:invert"
+      />
+      <span className="sr-only">Loading 3D Print Flow</span>
     </div>
   )
 }
