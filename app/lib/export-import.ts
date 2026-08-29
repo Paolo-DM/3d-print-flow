@@ -2,6 +2,7 @@ import { startTransition } from "react"
 
 import { replaceAll } from "~/lib/db"
 import {
+  brandKey,
   isRecord,
   isValidFigureV1,
   migrateV1Figures,
@@ -69,9 +70,28 @@ function isValidSpool(value: unknown): boolean {
   )
 }
 
-function isValidBrand(value: unknown): boolean {
+function isValidBrand(value: unknown): value is Brand {
   if (!isRecord(value)) return false
   return typeof value.id === "string" && typeof value.name === "string"
+}
+
+/**
+ * A v2 brand collection must uphold the invariant the brand lifecycle commands
+ * rely on: every name non-blank, every `brandKey` unique. Figures are not
+ * checked against it — orphan tolerance still stands.
+ */
+function isValidBrandCollection(
+  value: unknown
+): value is Record<string, Brand> {
+  if (!isRecord(value)) return false
+  const seenKeys = new Set<string>()
+  for (const brand of Object.values(value)) {
+    if (!isValidBrand(brand)) return false
+    const key = brandKey(brand.name)
+    if (key.length === 0 || seenKeys.has(key)) return false
+    seenKeys.add(key)
+  }
+  return true
 }
 
 function isValidFigure(value: unknown): boolean {
@@ -139,7 +159,7 @@ export function validateExportEnvelope(data: unknown): data is ExportEnvelope {
   const d = data.data
   return (
     allValuesMatch(d.spools, isValidSpool) &&
-    allValuesMatch(d.brands, isValidBrand) &&
+    isValidBrandCollection(d.brands) &&
     allValuesMatch(d.figures, isValidFigure) &&
     allValuesMatch(d.queueItems, isValidQueueItem)
   )

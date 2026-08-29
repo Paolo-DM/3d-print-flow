@@ -371,6 +371,53 @@ describe("FigureForm", () => {
     expect(store.getState().figures.get("fig-1")?.brandId).toBeNull()
   })
 
+  it("saves null when the selected brand is deleted while the form is open", () => {
+    const brand = createBrand({ id: "b1", name: "Naruto" })
+    store.setState({ brands: new Map([[brand.id, brand]]) })
+
+    renderForm()
+
+    fireEvent.change(screen.getByTestId("figure-name-input"), {
+      target: { value: "Kakashi" },
+    })
+    fireEvent.click(screen.getByTestId("brand-combobox-trigger"))
+    fireEvent.click(screen.getByTestId("brand-option-b1"))
+
+    act(() => {
+      store.getState().deleteBrand("b1")
+    })
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    const figures = Array.from(store.getState().figures.values())
+    expect(figures[0].brandId).toBeNull()
+  })
+
+  it("saves null — not the merge target — when the selected brand is merged away", () => {
+    const source = createBrand({ id: "b1", name: "naruto" })
+    const target = createBrand({ id: "b2", name: "Naruto Shippuden" })
+    const figure = createFigure({ id: "fig-1", name: "Kakashi", brandId: "b1" })
+    store.setState({
+      brands: new Map([
+        [source.id, source],
+        [target.id, target],
+      ]),
+      figures: new Map([[figure.id, figure]]),
+    })
+
+    renderForm({ figure })
+
+    act(() => {
+      store.getState().mergeBrands("b1", "b2")
+    })
+    // The merge rewired the stored figure; the open form still overrides to null
+    expect(store.getState().figures.get("fig-1")?.brandId).toBe("b2")
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+    expect(store.getState().figures.get("fig-1")?.brandId).toBeNull()
+  })
+
   it("shows the affected queue item warning in edit mode", () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({

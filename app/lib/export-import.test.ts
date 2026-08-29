@@ -262,6 +262,35 @@ describe("validateExportEnvelope", () => {
     expect(validateExportEnvelope(envelope)).toBe(false)
   })
 
+  it("rejects a blank or whitespace-only brand name", () => {
+    const blank = buildValidEnvelope()
+    ;(blank.data.brands as Record<string, unknown>).b1 = { id: "b1", name: "" }
+    expect(validateExportEnvelope(blank)).toBe(false)
+
+    const whitespace = buildValidEnvelope()
+    ;(whitespace.data.brands as Record<string, unknown>).b1 = {
+      id: "b1",
+      name: "   ",
+    }
+    expect(validateExportEnvelope(whitespace)).toBe(false)
+  })
+
+  it("rejects two brands sharing a brandKey", () => {
+    const envelope = buildValidEnvelope()
+    const brands = envelope.data.brands as Record<string, unknown>
+    brands.b1 = { id: "b1", name: "One Piece" }
+    brands.b2 = { id: "b2", name: "  ONE PIECE " }
+    expect(validateExportEnvelope(envelope)).toBe(false)
+  })
+
+  it("accepts brands whose names differ beyond casing and whitespace", () => {
+    const envelope = buildValidEnvelope()
+    const brands = envelope.data.brands as Record<string, unknown>
+    brands.b1 = { id: "b1", name: "One Piece" }
+    brands.b2 = { id: "b2", name: "One Piece Film" }
+    expect(validateExportEnvelope(envelope)).toBe(true)
+  })
+
   it("rejects malformed spool (missing hex)", () => {
     const envelope = buildValidEnvelope()
     ;(envelope.data.spools as Record<string, unknown>).s1 = {
@@ -592,6 +621,103 @@ describe("importData", () => {
     expect(state.spools.get("original")).toEqual(originalSpool)
     expect(state.spools.has("s1")).toBe(false)
     expect(state.brands.size).toBe(0)
+  })
+
+  describe("v2 brand-collection validation", () => {
+    it("rejects a blank brand name with the invalid-format message, leaving data untouched", async () => {
+      const originalSpool = createSpool({ id: "original" })
+      store.setState({ spools: new Map([["original", originalSpool]]) })
+
+      const envelope = buildValidEnvelope()
+      ;(envelope.data.brands as Record<string, unknown>).b1 = {
+        id: "b1",
+        name: "   ",
+      }
+
+      await expect(importData(fileFrom(envelope))).rejects.toThrow(
+        "Invalid file format. Please select a file exported from 3D Print Flow."
+      )
+      expect(store.getState().spools.get("original")).toEqual(originalSpool)
+      expect(mockReplaceAll).not.toHaveBeenCalled()
+    })
+
+    it("rejects two brands sharing a brandKey with the same message", async () => {
+      const envelope = buildValidEnvelope()
+      const brands = envelope.data.brands as Record<string, unknown>
+      brands.b1 = { id: "b1", name: "One Piece" }
+      brands.b2 = { id: "b2", name: "one piece" }
+
+      await expect(importData(fileFrom(envelope))).rejects.toThrow(
+        "Invalid file format. Please select a file exported from 3D Print Flow."
+      )
+      expect(mockReplaceAll).not.toHaveBeenCalled()
+    })
+
+    it("still round-trips an app-generated multi-brand v2 export", async () => {
+      const marvel = createBrand({ id: "b1", name: "Marvel" })
+      const pokemon = createBrand({ id: "b2", name: "Pokemon" })
+      const venom = createFigure({ id: "f1", name: "Venom", brandId: "b1" })
+      const pikachu = createFigure({ id: "f2", name: "Pikachu", brandId: "b2" })
+      store.setState({
+        brands: new Map([
+          ["b1", marvel],
+          ["b2", pokemon],
+        ]),
+        figures: new Map([
+          ["f1", venom],
+          ["f2", pikachu],
+        ]),
+      })
+
+      const exported = JSON.parse(JSON.stringify(buildExportData()))
+      const before = toJSON()
+      resetStore()
+      mockReplaceAll.mockResolvedValue(undefined)
+
+      await importData(fileFrom(exported))
+
+      expect(toJSON()).toEqual(before)
+    })
+
+    it("imports brand names verbatim — a padded name is accepted, not trimmed", async () => {
+      const envelope = buildValidEnvelope()
+      ;(envelope.data.brands as Record<string, unknown>).b1 = {
+        id: "b1",
+        name: "  Naruto  ",
+      }
+      mockReplaceAll.mockResolvedValue(undefined)
+
+      await importData(fileFrom(envelope))
+
+      expect(store.getState().brands.get("b1")?.name).toBe("  Naruto  ")
+      const persisted = mockReplaceAll.mock.calls[0][0] as ReturnType<
+        typeof toJSON
+      >
+      expect(persisted.brands.b1.name).toBe("  Naruto  ")
+    })
+
+    it("does not apply to v1 files (migration derives valid brands by construction)", async () => {
+      const envelope = buildValidV1Envelope()
+      const payload = {
+        ...envelope,
+        data: {
+          ...envelope.data,
+          figures: {
+            a: { ...envelope.data.figures.f1, id: "a", franchise: "Naruto" },
+            b: { ...envelope.data.figures.f1, id: "b", franchise: "  naruto " },
+            c: { ...envelope.data.figures.f1, id: "c", franchise: "   " },
+          },
+        },
+      }
+      mockReplaceAll.mockResolvedValue(undefined)
+
+      await importData(fileFrom(payload))
+
+      const state = store.getState()
+      expect(state.brands.size).toBe(1)
+      expect([...state.brands.values()][0].name).toBe("Naruto")
+      expect(state.figures.get("c")?.brandId).toBeNull()
+    })
   })
 
   it("throws validation error for malformed files", async () => {

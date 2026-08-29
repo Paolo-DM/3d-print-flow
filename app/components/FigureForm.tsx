@@ -53,17 +53,28 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
     )
   }
 
+  function resolveBrandId(): string | null {
+    switch (brandSelection.kind) {
+      case "existing":
+        // Re-resolved against the live brands map: a brand deleted or merged
+        // away since the form opened saves as null rather than as an orphan
+        // reference (and null wins over a merge's rewiring).
+        return brands.has(brandSelection.brandId)
+          ? brandSelection.brandId
+          : null
+      case "new":
+        // Staged inline creation: committed only now, at save.
+        return createBrand(brandSelection.name)
+      case "none":
+        return null
+    }
+  }
+
   function handleSave() {
     if (!canSave) return
     setSaved(true)
     const clampedSize = Math.round(Math.max(1, Math.min(999, size || 60)))
-    // Staged inline creation: a "new" brand is committed only now, at save.
-    const brandId =
-      brandSelection.kind === "existing"
-        ? brandSelection.brandId
-        : brandSelection.kind === "new"
-          ? createBrand(brandSelection.name)
-          : null
+    const brandId = resolveBrandId()
     const data = {
       name: name.trim(),
       brandId,

@@ -493,3 +493,352 @@ describe("brand grouping and filtering", () => {
     ).toBe("true")
   })
 })
+
+describe("brand manager from the catalog", () => {
+  function seedManagedCatalog() {
+    const marvel = createBrand({ id: "b-marvel", name: "Marvel" })
+    const pokemon = createBrand({ id: "b-pokemon", name: "Pokemon" })
+    const venom = createFigure({
+      id: "f-venom",
+      name: "Venom",
+      brandId: "b-marvel",
+    })
+    const pikachu = createFigure({
+      id: "f-pikachu",
+      name: "Pikachu",
+      brandId: "b-pokemon",
+    })
+    const custom = createFigure({
+      id: "f-custom",
+      name: "Custom Figure",
+      brandId: null,
+    })
+    store.setState({
+      brands: new Map([
+        [marvel.id, marvel],
+        [pokemon.id, pokemon],
+      ]),
+      figures: new Map([
+        [venom.id, venom],
+        [pikachu.id, pikachu],
+        [custom.id, custom],
+      ]),
+    })
+  }
+
+  function openManager() {
+    fireEvent.click(screen.getByRole("button", { name: "Manage brands" }))
+  }
+
+  function closeModal() {
+    fireEvent.click(screen.getByRole("button", { name: "Close" }))
+  }
+
+  function sectionHeadings() {
+    return screen
+      .queryAllByTestId("brand-section")
+      .map((section) => section.querySelector("h2")?.textContent)
+  }
+
+  it("opens from the header with an empty catalog and shows the empty message", () => {
+    renderCatalog()
+
+    openManager()
+
+    expect(
+      screen.getByText("Manage brands", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
+    expect(screen.getByText("No Brands Yet")).toBeTruthy()
+  })
+
+  function modalShells() {
+    return document.querySelectorAll(
+      "[data-slot='sheet-content'], [data-slot='drawer-content']"
+    )
+  }
+
+  it("the catalog owns exactly one modal shell, so the manager and form can never coexist", () => {
+    renderCatalog()
+
+    fireEvent.click(screen.getAllByText("Add Figure")[0].closest("button")!)
+    expect(modalShells()).toHaveLength(1)
+    expect(screen.getByTestId("figure-name-input")).toBeTruthy()
+
+    closeModal()
+    openManager()
+
+    // One shell, showing the manager and none of the form's fields
+    expect(modalShells()).toHaveLength(1)
+    expect(screen.queryByTestId("figure-name-input")).toBeNull()
+    expect(screen.queryByTestId("brand-combobox-trigger")).toBeNull()
+    expect(screen.getByText("No Brands Yet")).toBeTruthy()
+  })
+
+  it("reopening the shared modal starts the figure form from scratch", () => {
+    const figure = createFigure({ id: "f-sasuke", name: "Sasuke" })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+    renderCatalog()
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Sasuke" }))
+    expect(
+      (screen.getByTestId("figure-name-input") as HTMLInputElement).value
+    ).toBe("Sasuke")
+
+    closeModal()
+    fireEvent.click(screen.getByRole("button", { name: "Add Figure" }))
+
+    expect(
+      screen.getByText("Add Figure", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
+    expect(
+      (screen.getByTestId("figure-name-input") as HTMLInputElement).value
+    ).toBe("")
+  })
+
+  it("Enter commits a rename inside the hosted manager", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    openManager()
+    fireEvent.click(screen.getByRole("button", { name: "Rename Marvel" }))
+    fireEvent.change(screen.getByTestId("brand-rename-input-b-marvel"), {
+      target: { value: "Marvel Comics" },
+    })
+    fireEvent.keyDown(screen.getByTestId("brand-rename-input-b-marvel"), {
+      key: "Enter",
+    })
+
+    expect(store.getState().brands.get("b-marvel")?.name).toBe("Marvel Comics")
+    expect(screen.queryByTestId("brand-rename-input-b-marvel")).toBeNull()
+    expect(screen.getByTestId("brand-manager-list")).toBeTruthy()
+  })
+
+  it("Escape cancels the rename without dismissing the hosted manager (Sheet)", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    openManager()
+    fireEvent.click(screen.getByRole("button", { name: "Rename Marvel" }))
+    fireEvent.change(screen.getByTestId("brand-rename-input-b-marvel"), {
+      target: { value: "Half-typed" },
+    })
+    fireEvent.keyDown(screen.getByTestId("brand-rename-input-b-marvel"), {
+      key: "Escape",
+    })
+
+    // Edit mode gone, manager still mounted, nothing renamed
+    expect(screen.queryByTestId("brand-rename-input-b-marvel")).toBeNull()
+    expect(screen.getByTestId("brand-manager-list")).toBeTruthy()
+    expect(store.getState().brands.get("b-marvel")?.name).toBe("Marvel")
+
+    // A second Escape, no longer in a rename field, closes the manager
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    })
+    expect(screen.queryByTestId("brand-manager-list")).toBeNull()
+  })
+
+  it("Escape cancels the rename without dismissing the hosted manager (Drawer)", () => {
+    const originalInnerWidth = window.innerWidth
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 500,
+    })
+
+    try {
+      seedManagedCatalog()
+      renderCatalog()
+
+      openManager()
+      expect(
+        screen.getByText("Manage brands", {
+          selector: "[data-slot='drawer-title']",
+        })
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByRole("button", { name: "Rename Marvel" }))
+      fireEvent.keyDown(screen.getByTestId("brand-rename-input-b-marvel"), {
+        key: "Escape",
+      })
+
+      expect(screen.queryByTestId("brand-rename-input-b-marvel")).toBeNull()
+      expect(screen.getByTestId("brand-manager-list")).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        writable: true,
+        configurable: true,
+        value: originalInnerWidth,
+      })
+    }
+  })
+
+  it("a rename renames the section and chip while filter selection stays put", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
+
+    openManager()
+    fireEvent.click(screen.getByLabelText("Rename Marvel"))
+    fireEvent.change(screen.getByTestId("brand-rename-input-b-marvel"), {
+      target: { value: "Marvel Comics" },
+    })
+    fireEvent.click(screen.getByTestId("brand-rename-save-b-marvel"))
+    closeModal()
+
+    expect(sectionHeadings()).toEqual(["Marvel Comics", "No brand"])
+    expect(screen.getByTestId("brand-filter-b-marvel").textContent).toBe(
+      "Marvel Comics"
+    )
+    expect(
+      screen.getByTestId("brand-filter-b-pokemon").getAttribute("aria-pressed")
+    ).toBe("false")
+  })
+
+  it("an import (full data replace) drops in-progress manager state", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    openManager()
+    fireEvent.click(screen.getByLabelText("Rename Marvel"))
+    fireEvent.change(screen.getByTestId("brand-rename-input-b-marvel"), {
+      target: { value: "Half-typed" },
+    })
+
+    act(() => {
+      fromJSON(toJSON())
+    })
+
+    // key-reset on dataGeneration, not an Effect
+    expect(screen.queryByTestId("brand-rename-input-b-marvel")).toBeNull()
+    expect(store.getState().brands.get("b-marvel")?.name).toBe("Marvel")
+  })
+
+  it("merged figures adopt the target's filter state and the source group disappears", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    // Deselect the merge target before merging into it
+    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
+
+    openManager()
+    fireEvent.click(screen.getByTestId("brand-merge-b-marvel"))
+    fireEvent.click(screen.getByTestId("brand-merge-target-b-pokemon"))
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }))
+    closeModal()
+
+    // Venom moved under the deselected target, so it stays hidden
+    expect(sectionHeadings()).toEqual(["No brand"])
+    expect(screen.queryByText("Venom")).toBeNull()
+    expect(screen.queryByTestId("brand-filter-b-marvel")).toBeNull()
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-pokemon"))
+
+    expect(sectionHeadings()).toEqual(["Pokemon", "No brand"])
+    expect(screen.getByText("Venom")).toBeTruthy()
+    expect(screen.getByText("Pikachu")).toBeTruthy()
+  })
+
+  it("deleted-brand figures land in a deselected 'No brand' group and stay hidden", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    fireEvent.click(screen.getByTestId("brand-filter-no-brand"))
+
+    openManager()
+    fireEvent.click(screen.getByLabelText("Delete Marvel"))
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+    closeModal()
+
+    expect(store.getState().figures.get("f-venom")?.brandId).toBeNull()
+    expect(sectionHeadings()).toEqual(["Pokemon"])
+    expect(screen.queryByText("Venom")).toBeNull()
+
+    fireEvent.click(screen.getByTestId("brand-filter-no-brand"))
+
+    expect(sectionHeadings()).toEqual(["Pokemon", "No brand"])
+    expect(screen.getByText("Venom")).toBeTruthy()
+    expect(screen.getByText("Custom Figure")).toBeTruthy()
+  })
+
+  it("cancelling the delete dialog leaves the manager open and interactive (Sheet)", () => {
+    seedManagedCatalog()
+    renderCatalog()
+
+    openManager()
+    fireEvent.click(screen.getByLabelText("Delete Marvel"))
+    expect(screen.getByRole("alertdialog")).toBeTruthy()
+    // Both modal layers hold the document while stacked
+    expect(document.body.style.pointerEvents).toBe("none")
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+    expect(
+      screen.getByText("Manage brands", {
+        selector: "[data-slot='sheet-title']",
+      })
+    ).toBeTruthy()
+    expect(store.getState().brands.size).toBe(2)
+
+    // Still interactive underneath the dismissed dialog — a role query also
+    // proves the row was not left aria-hidden by the stacked layer
+    fireEvent.click(screen.getByRole("button", { name: "Rename Marvel" }))
+    expect(screen.getByTestId("brand-rename-input-b-marvel")).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId("brand-rename-cancel-b-marvel"))
+    closeModal()
+
+    // The stacked layers released the document when everything closed
+    expect(document.body.style.pointerEvents).not.toBe("none")
+  })
+
+  it("cancelling the merge dialog leaves the manager open and interactive (Drawer)", () => {
+    const originalInnerWidth = window.innerWidth
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 500,
+    })
+
+    try {
+      seedManagedCatalog()
+      renderCatalog()
+
+      openManager()
+      expect(
+        screen.getByText("Manage brands", {
+          selector: "[data-slot='drawer-title']",
+        })
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByTestId("brand-merge-b-marvel"))
+      fireEvent.click(screen.getByTestId("brand-merge-target-b-pokemon"))
+      expect(screen.getByRole("alertdialog")).toBeTruthy()
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+      expect(screen.queryByRole("alertdialog")).toBeNull()
+      expect(
+        screen.getByText("Manage brands", {
+          selector: "[data-slot='drawer-title']",
+        })
+      ).toBeTruthy()
+      expect(store.getState().brands.size).toBe(2)
+
+      fireEvent.click(screen.getByRole("button", { name: "Rename Marvel" }))
+      expect(screen.getByTestId("brand-rename-input-b-marvel")).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        writable: true,
+        configurable: true,
+        value: originalInnerWidth,
+      })
+    }
+  })
+})

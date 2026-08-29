@@ -6,6 +6,7 @@ import { computeAffectedQueueItems } from "~/lib/derived"
 import type { Brand, Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { useIsMobile } from "~/hooks/use-mobile"
+import { BrandManager } from "~/components/BrandManager"
 import { FigureCard } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
 import {
@@ -42,6 +43,14 @@ import {
 
 /** Filter/group id for figures without a resolvable brand. */
 const NO_BRAND = "no-brand"
+
+/**
+ * The catalog owns exactly one modal shell, so the figure form and the brand
+ * manager can never be open at the same time (CAP-7).
+ */
+type CatalogModal =
+  | { kind: "figure"; figure: Figure | null }
+  | { kind: "brands" }
 
 interface BrandGroup {
   id: string
@@ -203,40 +212,58 @@ export default function FigureCatalog() {
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
 
+  // Closing leaves `modal` intact so the exit animation keeps its content.
   const [open, setOpen] = useState(false)
-  const [editingFigure, setEditingFigure] = useState<Figure | null>(null)
+  const [modal, setModal] = useState<CatalogModal>({
+    kind: "figure",
+    figure: null,
+  })
+  // Bumped on every open so reopening before the exit animation finishes
+  // remounts the content instead of reusing a stale draft.
+  const [openSeq, setOpenSeq] = useState(0)
   const [deletingFigure, setDeletingFigure] = useState<Figure | null>(null)
 
   const affectedQueueItems = deletingFigure
     ? computeAffectedQueueItems(deletingFigure.id, queueItems)
     : []
 
-  const title = editingFigure ? "Edit Figure" : "Add Figure"
+  const title =
+    modal.kind === "brands"
+      ? "Manage brands"
+      : modal.figure
+        ? "Edit Figure"
+        : "Add Figure"
 
   const emptyDescription =
     spools.size > 0
       ? `Great, you have ${spools.size} spool${spools.size === 1 ? "" : "s"}! Create your first figure to start building your catalog.`
       : "Add filament spools first, then create figures to assign colors."
 
-  function handleAddFigure() {
-    setEditingFigure(null)
+  function openModal(next: CatalogModal) {
+    setModal(next)
+    setOpenSeq((seq) => seq + 1)
     setOpen(true)
   }
 
+  function handleAddFigure() {
+    openModal({ kind: "figure", figure: null })
+  }
+
   function handleEditFigure(figure: Figure) {
-    setEditingFigure(figure)
-    setOpen(true)
+    openModal({ kind: "figure", figure })
+  }
+
+  function handleManageBrands() {
+    openModal({ kind: "brands" })
   }
 
   function handleDeleteFigure(figure: Figure) {
     setOpen(false)
-    setEditingFigure(null)
     setDeletingFigure(figure)
   }
 
   function handleClose() {
     setOpen(false)
-    setEditingFigure(null)
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -252,20 +279,30 @@ export default function FigureCatalog() {
     }
   }
 
-  const formContent = (
-    <FigureForm
-      key={editingFigure?.id ?? "create"}
-      figure={editingFigure ?? undefined}
-      onSave={handleClose}
-      onCancel={handleClose}
-    />
-  )
+  // key-reset (not an Effect) drops transient state on a data replace and on
+  // every reopen of the shared modal shell
+  const modalContent =
+    modal.kind === "brands" ? (
+      <BrandManager key={`${dataGeneration}-${openSeq}`} />
+    ) : (
+      <FigureForm
+        key={`${modal.figure?.id ?? "create"}-${openSeq}`}
+        figure={modal.figure ?? undefined}
+        onSave={handleClose}
+        onCancel={handleClose}
+      />
+    )
 
   return (
     <div className="p-4 lg:p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Figure Catalog</h1>
-        <Button onClick={handleAddFigure}>Add Figure</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleManageBrands}>
+            Manage brands
+          </Button>
+          <Button onClick={handleAddFigure}>Add Figure</Button>
+        </div>
       </div>
 
       {figureList.length === 0 ? (
@@ -299,7 +336,7 @@ export default function FigureCatalog() {
             <DrawerHeader>
               <DrawerTitle>{title}</DrawerTitle>
             </DrawerHeader>
-            {formContent}
+            {modalContent}
           </DrawerContent>
         </Drawer>
       ) : (
@@ -308,7 +345,7 @@ export default function FigureCatalog() {
             <SheetHeader>
               <SheetTitle>{title}</SheetTitle>
             </SheetHeader>
-            {formContent}
+            {modalContent}
           </SheetContent>
         </Sheet>
       )}

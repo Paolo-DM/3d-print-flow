@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import * as db from "~/lib/db"
+import { brandKey } from "~/lib/migration"
 import { fromJSON, getPersist, setPersist, store, toJSON } from "~/lib/store"
 import {
   createBrand,
@@ -11,7 +12,7 @@ import {
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
-import type { QueueItem } from "~/lib/types"
+import type { Figure, QueueItem } from "~/lib/types"
 
 vi.mock("~/lib/db", () => ({
   writeStore: vi.fn(() => Promise.resolve()),
@@ -279,6 +280,352 @@ describe("brand mutations", () => {
     const a = store.getState().createBrand("Naruto")
     const b = store.getState().createBrand("One Piece")
     expect(a).not.toBe(b)
+  })
+})
+
+describe("brand lifecycle commands", () => {
+  const naruto = createBrand({ id: "b-naruto", name: "naruto" })
+  const onePiece = createBrand({ id: "b-op", name: "One Piece" })
+
+  /** Seed without persistence noise so writeStore calls belong to the command. */
+  function seed(figures: ReturnType<typeof createFigure>[] = []) {
+    setPersist(false)
+    store.setState({
+      brands: new Map([
+        [naruto.id, naruto],
+        [onePiece.id, onePiece],
+      ]),
+      figures: new Map(figures.map((figure) => [figure.id, figure])),
+    })
+    setPersist(true)
+    vi.clearAllMocks()
+  }
+
+  function writtenStores() {
+    return vi
+      .mocked(db.writeStore)
+      .mock.calls.map((call) => call[0])
+      .sort()
+  }
+
+  function lastWrite(name: "brands" | "figures") {
+    const call = vi
+      .mocked(db.writeStore)
+      .mock.calls.findLast((c) => c[0] === name)
+    return call?.[1]
+  }
+
+  /** The invariant every command must leave intact. */
+  function expectUniqueNonBlankBrands() {
+    const keys = [...store.getState().brands.values()].map((brand) => {
+      expect(brand.name.trim().length).toBeGreaterThan(0)
+      return brandKey(brand.name)
+    })
+    expect(new Set(keys).size).toBe(keys.length)
+  }
+
+  describe("renameBrand", () => {
+    it("renames casing-only, preserving the id", () => {
+      seed()
+      const result = store.getState().renameBrand(naruto.id, "Naruto")
+
+      expect(result).toEqual({ type: "renamed" })
+      expect(store.getState().brands.get(naruto.id)).toEqual({
+        id: naruto.id,
+        name: "Naruto",
+      })
+      expect(store.getState().brands.size).toBe(2)
+      expectUniqueNonBlankBrands()
+    })
+
+    it("stores the trimmed name", () => {
+      seed()
+      expect(store.getState().renameBrand(naruto.id, "  Naruto  ")).toEqual({
+        type: "renamed",
+      })
+      expect(store.getState().brands.get(naruto.id)?.name).toBe("Naruto")
+    })
+
+    it("returns unchanged when the trimmed text equals the stored name", () => {
+      seed()
+      const before = store.getState().brands
+      expect(store.getState().renameBrand(naruto.id, "  naruto  ")).toEqual({
+        type: "unchanged",
+      })
+      expect(store.getState().brands).toBe(before)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("rejects an empty or whitespace-only name without mutating", () => {
+      seed()
+      const before = store.getState().brands
+      expect(store.getState().renameBrand(naruto.id, "")).toEqual({
+        type: "invalid",
+      })
+      expect(store.getState().renameBrand(naruto.id, "   ")).toEqual({
+        type: "invalid",
+      })
+      expect(store.getState().brands).toBe(before)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("reports a collision with another brand and does not mutate", () => {
+      seed()
+      const before = store.getState().brands
+      expect(store.getState().renameBrand(naruto.id, "  ONE PIECE ")).toEqual({
+        type: "collision",
+        existingId: onePiece.id,
+      })
+      expect(store.getState().brands).toBe(before)
+      expect(store.getState().brands.get(naruto.id)?.name).toBe("naruto")
+      expectUniqueNonBlankBrands()
+    })
+
+    it("checks not-found before invalid", () => {
+      seed()
+      expect(store.getState().renameBrand("missing", "   ")).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().renameBrand("missing", "Anything")).toEqual({
+        type: "not-found",
+      })
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("writes only the brands store", () => {
+      seed([createFigure({ id: "f1", brandId: naruto.id })])
+      store.getState().renameBrand(naruto.id, "Naruto")
+
+      expect(writtenStores()).toEqual(["brands"])
+      expect(lastWrite("brands")?.get(naruto.id)).toEqual({
+        id: naruto.id,
+        name: "Naruto",
+      })
+    })
+
+    it("heals an imported untrimmed name — same visible text is a rename", () => {
+      const untrimmed = createBrand({ id: "b-untrimmed", name: "  Naruto  " })
+      setPersist(false)
+      store.setState({ brands: new Map([[untrimmed.id, untrimmed]]) })
+      setPersist(true)
+      vi.clearAllMocks()
+
+      // trim(input) !== stored name, so this is `renamed`, not `unchanged`
+      expect(store.getState().renameBrand(untrimmed.id, "Naruto")).toEqual({
+        type: "renamed",
+      })
+      expect(store.getState().brands.get(untrimmed.id)?.name).toBe("Naruto")
+      expectUniqueNonBlankBrands()
+    })
+  })
+
+  describe("mergeBrands", () => {
+    it("rewires source figures, deletes the source, and counts the moves", () => {
+      const f1 = createFigure({ id: "f1", brandId: naruto.id })
+      const f2 = createFigure({ id: "f2", brandId: naruto.id })
+      const f3 = createFigure({ id: "f3", brandId: onePiece.id })
+      seed([f1, f2, f3])
+
+      const result = store.getState().mergeBrands(naruto.id, onePiece.id)
+
+      expect(result).toEqual({ type: "merged", movedFigureCount: 2 })
+      expect(store.getState().brands.has(naruto.id)).toBe(false)
+      expect(store.getState().brands.get(onePiece.id)).toEqual(onePiece)
+      expect(store.getState().figures.get("f1")?.brandId).toBe(onePiece.id)
+      expect(store.getState().figures.get("f2")?.brandId).toBe(onePiece.id)
+      expect(store.getState().figures.get("f3")?.brandId).toBe(onePiece.id)
+      expectUniqueNonBlankBrands()
+    })
+
+    it("merges a zero-figure source with movedFigureCount 0", () => {
+      seed([createFigure({ id: "f1", brandId: onePiece.id })])
+
+      expect(store.getState().mergeBrands(naruto.id, onePiece.id)).toEqual({
+        type: "merged",
+        movedFigureCount: 0,
+      })
+      expect(store.getState().brands.has(naruto.id)).toBe(false)
+      expect(store.getState().figures.get("f1")?.brandId).toBe(onePiece.id)
+    })
+
+    it("returns same-brand before not-found", () => {
+      seed()
+      expect(store.getState().mergeBrands(naruto.id, naruto.id)).toEqual({
+        type: "same-brand",
+      })
+      expect(store.getState().mergeBrands("missing", "missing")).toEqual({
+        type: "same-brand",
+      })
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("returns not-found when either id is missing", () => {
+      seed([createFigure({ id: "f1", brandId: naruto.id })])
+      const brands = store.getState().brands
+      const figures = store.getState().figures
+
+      expect(store.getState().mergeBrands("missing", onePiece.id)).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().mergeBrands(naruto.id, "missing")).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().brands).toBe(brands)
+      expect(store.getState().figures).toBe(figures)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("leaves a figure whose brandId resolves to no brand untouched", () => {
+      const orphan = createFigure({ id: "f-orphan", brandId: "gone" })
+      const owned = createFigure({ id: "f1", brandId: naruto.id })
+      seed([orphan, owned])
+
+      store.getState().mergeBrands(naruto.id, onePiece.id)
+
+      expect(store.getState().figures.get("f-orphan")).toEqual(orphan)
+      expect(store.getState().figures.get("f1")?.brandId).toBe(onePiece.id)
+    })
+
+    it("writes both the brands and figures stores in one command", () => {
+      seed([createFigure({ id: "f1", brandId: naruto.id })])
+
+      store.getState().mergeBrands(naruto.id, onePiece.id)
+
+      expect(writtenStores()).toEqual(["brands", "figures"])
+      expect(lastWrite("brands")?.has(naruto.id)).toBe(false)
+      const persistedFigures = lastWrite("figures") as
+        | Map<string, Figure>
+        | undefined
+      expect(persistedFigures?.get("f1")?.brandId).toBe(onePiece.id)
+    })
+  })
+
+  describe("deleteBrand", () => {
+    it("nulls every referencing figure, removes the brand, and counts them", () => {
+      const f1 = createFigure({ id: "f1", brandId: naruto.id })
+      const f2 = createFigure({ id: "f2", brandId: naruto.id })
+      const f3 = createFigure({ id: "f3", brandId: onePiece.id })
+      seed([f1, f2, f3])
+
+      const result = store.getState().deleteBrand(naruto.id)
+
+      expect(result).toEqual({ type: "deleted", detachedFigureCount: 2 })
+      expect(store.getState().brands.has(naruto.id)).toBe(false)
+      expect(store.getState().figures.get("f1")?.brandId).toBeNull()
+      expect(store.getState().figures.get("f2")?.brandId).toBeNull()
+      expect(store.getState().figures.get("f3")?.brandId).toBe(onePiece.id)
+      expect(store.getState().figures.size).toBe(3)
+      expectUniqueNonBlankBrands()
+    })
+
+    it("deletes a zero-figure brand with detachedFigureCount 0", () => {
+      seed([createFigure({ id: "f1", brandId: onePiece.id })])
+
+      expect(store.getState().deleteBrand(naruto.id)).toEqual({
+        type: "deleted",
+        detachedFigureCount: 0,
+      })
+      expect(store.getState().brands.has(naruto.id)).toBe(false)
+      expect(store.getState().figures.get("f1")?.brandId).toBe(onePiece.id)
+    })
+
+    it("returns not-found for an unknown id without mutating", () => {
+      seed([createFigure({ id: "f1", brandId: naruto.id })])
+      const brands = store.getState().brands
+      const figures = store.getState().figures
+
+      expect(store.getState().deleteBrand("missing")).toEqual({
+        type: "not-found",
+      })
+      expect(store.getState().brands).toBe(brands)
+      expect(store.getState().figures).toBe(figures)
+      expect(db.writeStore).not.toHaveBeenCalled()
+    })
+
+    it("leaves a figure whose brandId resolves to no brand untouched", () => {
+      const orphan = createFigure({ id: "f-orphan", brandId: "gone" })
+      seed([orphan, createFigure({ id: "f1", brandId: naruto.id })])
+
+      store.getState().deleteBrand(naruto.id)
+
+      expect(store.getState().figures.get("f-orphan")).toEqual(orphan)
+      expect(store.getState().figures.get("f1")?.brandId).toBeNull()
+    })
+
+    it("cascades in both store state and persisted contents", () => {
+      seed([createFigure({ id: "f1", brandId: naruto.id })])
+
+      store.getState().deleteBrand(naruto.id)
+
+      expect(writtenStores()).toEqual(["brands", "figures"])
+      expect(lastWrite("brands")?.has(naruto.id)).toBe(false)
+      const persistedFigures = lastWrite("figures") as
+        | Map<string, Figure>
+        | undefined
+      expect(persistedFigures?.get("f1")?.brandId).toBeNull()
+    })
+  })
+
+  it("merge and delete each apply brands+figures in a single set()", () => {
+    // Two writeStore calls cannot tell one set() from two — count the store's
+    // own notifications instead (CAP-5).
+    seed([
+      createFigure({ id: "f1", brandId: naruto.id }),
+      createFigure({ id: "f2", brandId: onePiece.id }),
+    ])
+
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+
+    try {
+      store.getState().mergeBrands(naruto.id, onePiece.id)
+      expect(notifications).toBe(1)
+
+      store.getState().deleteBrand(onePiece.id)
+      expect(notifications).toBe(2)
+    } finally {
+      unsubscribe()
+    }
+
+    expect(store.getState().brands.size).toBe(0)
+    expect(store.getState().figures.get("f1")?.brandId).toBeNull()
+    expect(store.getState().figures.get("f2")?.brandId).toBeNull()
+  })
+
+  it("a merge whose figures write rejects notifies and converges on retry", async () => {
+    seed([createFigure({ id: "f1", brandId: naruto.id })])
+    vi.mocked(db.writeStore).mockImplementation((name) =>
+      name === "figures"
+        ? Promise.reject(new Error("IDB failure"))
+        : Promise.resolve()
+    )
+
+    store.getState().mergeBrands(naruto.id, onePiece.id)
+
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
+
+    const actionArg = (toast.error as Mock).mock.calls[0][1]
+    vi.mocked(db.writeStore).mockClear()
+    vi.mocked(db.writeStore).mockImplementation(() => Promise.resolve())
+    actionArg.action.onClick()
+
+    await vi.waitFor(() =>
+      expect(toast.dismiss).toHaveBeenCalledWith("persistence-failure")
+    )
+
+    expect(writtenStores()).toEqual([
+      "brands",
+      "figures",
+      "queueItems",
+      "spools",
+    ])
+    expect(lastWrite("brands")?.has(naruto.id)).toBe(false)
+    const persistedFigures = lastWrite("figures") as
+      | Map<string, Figure>
+      | undefined
+    expect(persistedFigures?.get("f1")?.brandId).toBe(onePiece.id)
   })
 })
 

@@ -6,6 +6,26 @@ import { computeCompletionStatus } from "~/lib/derived"
 import { brandKey } from "~/lib/migration"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 
+/**
+ * Brand lifecycle results — discriminated unions the UI switches on. The store
+ * decides the outcome; the caller decides how to present it.
+ */
+export type RenameBrandResult =
+  | { type: "renamed" }
+  | { type: "unchanged" }
+  | { type: "collision"; existingId: string }
+  | { type: "invalid" }
+  | { type: "not-found" }
+
+export type MergeBrandsResult =
+  | { type: "merged"; movedFigureCount: number }
+  | { type: "same-brand" }
+  | { type: "not-found" }
+
+export type DeleteBrandResult =
+  | { type: "deleted"; detachedFigureCount: number }
+  | { type: "not-found" }
+
 // Module-level flag — NOT in store state (avoids re-renders)
 let _persist = true
 
@@ -31,6 +51,22 @@ interface PrintFlowState {
    * name is empty after trimming.
    */
   createBrand: (name: string) => string | null
+  /**
+   * Rename a brand in place, preserving its id. Checked in order: missing id,
+   * blank name, no-op, brandKey collision with a *different* brand — only then
+   * is the trimmed name written.
+   */
+  renameBrand: (id: string, name: string) => RenameBrandResult
+  /**
+   * Move every figure of `sourceId` to `targetId` and drop the source brand,
+   * both maps in one `set()`. Checked in order: same brand, missing brand.
+   */
+  mergeBrands: (sourceId: string, targetId: string) => MergeBrandsResult
+  /**
+   * Remove a brand and null the `brandId` of every figure referencing it
+   * (cascade-to-null, not reference blocking), both maps in one `set()`.
+   */
+  deleteBrand: (id: string) => DeleteBrandResult
   updateSpool: (id: string, updates: Partial<Omit<Spool, "id">>) => void
   deleteSpool: (id: string) => void
   createFigure: (data: Omit<Figure, "id">) => void
@@ -72,6 +108,72 @@ export const store = createStore<PrintFlowState>((set, get) => ({
       return { brands: next }
     })
     return id
+  },
+
+  renameBrand(id, name) {
+    const { brands } = get()
+    const existing = brands.get(id)
+    if (!existing) return { type: "not-found" }
+
+    const trimmed = name.trim()
+    if (trimmed.length === 0) return { type: "invalid" }
+    if (trimmed === existing.name) return { type: "unchanged" }
+
+    // A casing-only change under the same brandKey is a plain rename, so the
+    // collision check ignores the brand being renamed.
+    const key = brandKey(trimmed)
+    for (const brand of brands.values()) {
+      if (brand.id !== id && brandKey(brand.name) === key) {
+        return { type: "collision", existingId: brand.id }
+      }
+    }
+
+    const next = new Map(brands)
+    next.set(id, { ...existing, name: trimmed })
+    set({ brands: next })
+    return { type: "renamed" }
+  },
+
+  mergeBrands(sourceId, targetId) {
+    if (sourceId === targetId) return { type: "same-brand" }
+    const { brands, figures } = get()
+    if (!brands.has(sourceId) || !brands.has(targetId)) {
+      return { type: "not-found" }
+    }
+
+    const nextBrands = new Map(brands)
+    nextBrands.delete(sourceId)
+    const nextFigures = new Map(figures)
+    let movedFigureCount = 0
+    for (const [figureId, figure] of figures) {
+      // Strict id equality — a figure pointing at no live brand is left alone.
+      if (figure.brandId === sourceId) {
+        nextFigures.set(figureId, { ...figure, brandId: targetId })
+        movedFigureCount += 1
+      }
+    }
+
+    set({ brands: nextBrands, figures: nextFigures })
+    return { type: "merged", movedFigureCount }
+  },
+
+  deleteBrand(id) {
+    const { brands, figures } = get()
+    if (!brands.has(id)) return { type: "not-found" }
+
+    const nextBrands = new Map(brands)
+    nextBrands.delete(id)
+    const nextFigures = new Map(figures)
+    let detachedFigureCount = 0
+    for (const [figureId, figure] of figures) {
+      if (figure.brandId === id) {
+        nextFigures.set(figureId, { ...figure, brandId: null })
+        detachedFigureCount += 1
+      }
+    }
+
+    set({ brands: nextBrands, figures: nextFigures })
+    return { type: "deleted", detachedFigureCount }
   },
 
   updateSpool(id, updates) {

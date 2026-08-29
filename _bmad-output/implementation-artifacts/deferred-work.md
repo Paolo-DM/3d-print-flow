@@ -58,3 +58,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-brand.md`
   summary: Figures inside catalog brand sections render in Map insertion order; consider alphabetical sorting within each section to match the spool-library precedent (commit 30e1bfb).
   evidence: Brand sections, filter chips, and the combobox all sort alphabetically, making the unsorted intra-section figure order visibly inconsistent; the flat grid had the same insertion order pre-change, so this is pre-existing ordering behavior surfaced by grouping.
+
+## Deferred from: code review of spec-brand-lifecycle (2026-08-29)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
+  summary: `brandKey` does not Unicode-normalize, so two brand names differing only by NFC vs NFD (e.g. "Pokémon" typed two ways) are treated as distinct everywhere brandKey is the uniqueness rule.
+  evidence: `brandKey` in app/lib/migration.ts is `name.trim().toLowerCase()` with no `.normalize()`; visually identical brands would pass the v2 import uniqueness check, evade renameBrand's collision detection, and produce two sections in the catalog. Pre-existing — brandKey predates this story and governs v1 migration and inline create as well, so changing it affects migration output and needs its own scope.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
+  summary: Focus is not returned to the row's Rename button after an inline rename is saved or cancelled in the brand manager.
+  evidence: The autoFocused input unmounts with no focus target named, so inside the Sheet/Drawer focus falls to the container and a keyboard user's next Tab restarts from the top of the modal; confirming a merge or delete removes the row entirely with the same effect. Not required by ui-flows.md, and a correct fix needs per-row refs, so it is more than a trivial patch.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
+  summary: The alphabetical `a.name.localeCompare(b.name)` comparator is now inlined in three places — catalog.tsx, BrandCombobox.tsx, and BrandManager.tsx — which ui-flows.md requires to stay identical.
+  evidence: This is exactly the 3-occurrence threshold the project's DRY stance names for extraction, and a future ordering change (e.g. explicit locale or `sensitivity`) would have to be applied three times or silently diverge. Deferred because extracting it edits two files this story otherwise does not touch.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-brand-lifecycle.md`
+  summary: FigureForm is not key-reset on `dataGeneration`, so an import landing while the figure form is open leaves a draft whose `figure.id` may no longer exist; saving silently discards the user's edits.
+  evidence: catalog.tsx key-resets BrandManager on dataGeneration but keys FigureForm on the figure id only; `updateFigure`'s missing-id guard returns state unchanged while `onSave()` still fires and closes the modal. Pre-existing (the form was never dataGeneration-keyed) and overlapping the 2026-08-28 Codex deferral above, which describes the same race from the overwrite direction.
