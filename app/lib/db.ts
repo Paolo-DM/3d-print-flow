@@ -6,6 +6,11 @@ import {
   migrateV1Figures,
   type FigureV1,
 } from "~/lib/migration"
+import {
+  STARTER_BRANDS,
+  STARTER_FIGURES,
+  STARTER_SPOOLS,
+} from "~/lib/starter-data"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 
 interface PrintFlowDB extends DBSchema {
@@ -42,6 +47,32 @@ function getDB() {
         }
         if (oldVersion < 2) {
           db.createObjectStore("brands", { keyPath: "id" })
+        }
+        if (oldVersion === 0) {
+          try {
+            const spoolStore = tx.objectStore("spools")
+            const brandStore = tx.objectStore("brands")
+            const figureStore = tx.objectStore("figures")
+
+            for (const spool of STARTER_SPOOLS) {
+              await spoolStore.put(spool)
+            }
+            for (const brand of STARTER_BRANDS) {
+              await brandStore.put(brand)
+            }
+            for (const figure of STARTER_FIGURES) {
+              await figureStore.put(figure)
+            }
+          } catch {
+            // `idb` does not await an async upgrade callback. Abort explicitly
+            // so a synchronous request failure cannot commit a partial seed.
+            void tx.done.catch(() => {})
+            try {
+              tx.abort()
+            } catch {
+              // An asynchronous request failure may already have aborted it.
+            }
+          }
         }
         if (oldVersion === 1) {
           // Live-data migration: derive brands from v1 figures' franchise

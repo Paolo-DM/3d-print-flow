@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { _resetDB, hydrate, replaceAll, writeStore } from "~/lib/db"
+import v1Fixture from "~/lib/fixtures/export-v1-2026-08-28.json"
 import {
   createBrand,
   createFigure,
@@ -46,6 +47,31 @@ async function seedV1Database(rows: {
   db.close()
 }
 
+/** Seed an existing schema-v2 database without going through app startup. */
+async function seedV2Database(
+  rows: {
+    spools?: unknown[]
+    brands?: unknown[]
+    figures?: unknown[]
+    queueItems?: unknown[]
+  } = {}
+) {
+  const db = await openDB("print-flow", 2, {
+    upgrade(db) {
+      db.createObjectStore("spools", { keyPath: "id" })
+      db.createObjectStore("brands", { keyPath: "id" })
+      db.createObjectStore("figures", { keyPath: "id" })
+      db.createObjectStore("queueItems", { keyPath: "id" })
+    },
+  })
+  for (const spool of rows.spools ?? []) await db.put("spools", spool)
+  for (const brand of rows.brands ?? []) await db.put("brands", brand)
+  for (const figure of rows.figures ?? []) await db.put("figures", figure)
+  for (const queueItem of rows.queueItems ?? [])
+    await db.put("queueItems", queueItem)
+  db.close()
+}
+
 function v1Figure(
   id: string,
   franchise: string,
@@ -59,6 +85,65 @@ function v1Figure(
     notes: "",
     requiredColors: [],
     ...overrides,
+  }
+}
+
+function expectStarterCatalog(data: Awaited<ReturnType<typeof hydrate>>) {
+  expect(data.spools).toEqual(v1Fixture.data.spools)
+  expect(data.brands).toEqual({
+    "4d5b503d-e96b-44bf-bfaa-77a80ecfdb90": {
+      id: "4d5b503d-e96b-44bf-bfaa-77a80ecfdb90",
+      name: "Marvel",
+    },
+    "fa792920-805b-4a59-bf9f-9c762d8df72d": {
+      id: "fa792920-805b-4a59-bf9f-9c762d8df72d",
+      name: "Pokemon",
+    },
+    "fe49ac2e-5592-4fa5-828f-95d1d52f634f": {
+      id: "fe49ac2e-5592-4fa5-828f-95d1d52f634f",
+      name: "Lilo & Stitch",
+    },
+  })
+  expect(data.figures).toEqual({
+    "fig-pikachu": {
+      id: "fig-pikachu",
+      name: "Pikachu",
+      brandId: "fa792920-805b-4a59-bf9f-9c762d8df72d",
+      size: 60,
+      notes: "",
+      requiredColors: ["sp-yellow", "sp-black", "sp-red", "sp-brown"],
+    },
+    "fig-spiderman": {
+      id: "fig-spiderman",
+      name: "Spiderman",
+      brandId: "4d5b503d-e96b-44bf-bfaa-77a80ecfdb90",
+      size: 60,
+      notes: "",
+      requiredColors: ["sp-red", "sp-dark-blue", "sp-black", "sp-white"],
+    },
+    "fig-stitch": {
+      id: "fig-stitch",
+      name: "Stitch",
+      brandId: "fe49ac2e-5592-4fa5-828f-95d1d52f634f",
+      size: 60,
+      notes: "",
+      requiredColors: [
+        "sp-blue",
+        "sp-light-blue",
+        "sp-purple",
+        "sp-pink",
+        "sp-black",
+        "sp-white",
+      ],
+    },
+  })
+  expect(data.queueItems).toEqual({})
+
+  for (const figure of Object.values(data.figures)) {
+    expect(data.brands[figure.brandId!]).toBeDefined()
+    for (const spoolId of figure.requiredColors) {
+      expect(data.spools[spoolId]).toBeDefined()
+    }
   }
 }
 
@@ -136,7 +221,10 @@ describe("replaceAll", () => {
     expect(data.queueItems[newQueueItem.id]).toEqual(newQueueItem)
   })
 
-  it("returns empty records when database is empty", async () => {
+  it("persists an intentionally empty replacement across reopen", async () => {
+    await replaceAll({ spools: {}, brands: {}, figures: {}, queueItems: {} })
+    _resetDB()
+
     const data = await hydrate()
     expect(Object.keys(data.spools)).toHaveLength(0)
     expect(Object.keys(data.brands)).toHaveLength(0)
@@ -146,16 +234,52 @@ describe("replaceAll", () => {
 })
 
 describe("schema upgrade", () => {
-  it("fresh install creates all four stores without migrating", async () => {
-    await hydrate()
+  it("fresh install atomically hydrates the exact starter catalog", async () => {
+    const data = await hydrate()
     const db = await openDB("print-flow", 2)
+
     expect([...db.objectStoreNames].sort()).toEqual([
       "brands",
       "figures",
       "queueItems",
       "spools",
     ])
+    expectStarterCatalog(data)
     db.close()
+  })
+
+  it("does not seed an existing empty v2 database", async () => {
+    await seedV2Database()
+
+    expect(await hydrate()).toEqual({
+      spools: {},
+      brands: {},
+      figures: {},
+      queueItems: {},
+    })
+  })
+
+  it("does not add starter records to an existing populated v2 database", async () => {
+    const spool = createSpool({ id: "custom-spool" })
+    const brand = createBrand({ id: "custom-brand" })
+    const figure = createFigure({ id: "custom-figure", brandId: brand.id })
+    const queueItem = createQueueItem({
+      id: "custom-queue-item",
+      figureId: figure.id,
+    })
+    await seedV2Database({
+      spools: [spool],
+      brands: [brand],
+      figures: [figure],
+      queueItems: [queueItem],
+    })
+
+    expect(await hydrate()).toEqual({
+      spools: { [spool.id]: spool },
+      brands: { [brand.id]: brand },
+      figures: { [figure.id]: figure },
+      queueItems: { [queueItem.id]: queueItem },
+    })
   })
 
   it("migrates a v1 database: derives brands, rewires figures, drops franchise", async () => {
@@ -185,6 +309,38 @@ describe("schema upgrade", () => {
     for (const figure of Object.values(data.figures)) {
       expect("franchise" in figure).toBe(false)
     }
+    expect(data.spools["sp-yellow"]).toBeUndefined()
+    expect(data.figures["fig-pikachu"]).toBeUndefined()
+  })
+
+  it("aborts fresh database creation when starter seeding fails", async () => {
+    const originalPut = IDBObjectStore.prototype.put
+    let putCount = 0
+    const failingPut = vi
+      .spyOn(IDBObjectStore.prototype, "put")
+      .mockImplementation(function (
+        this: IDBObjectStore,
+        value: unknown,
+        key?: IDBValidKey
+      ) {
+        putCount += 1
+        if (putCount === 6) {
+          throw new DOMException("Seed failed", "AbortError")
+        }
+        return key === undefined
+          ? originalPut.call(this, value)
+          : originalPut.call(this, value, key)
+      })
+
+    try {
+      await expect(hydrate()).rejects.toThrow()
+    } finally {
+      failingPut.mockRestore()
+    }
+    expect(putCount).toBe(6)
+
+    const data = await hydrate()
+    expectStarterCatalog(data)
   })
 
   it("leaves spools and queue items untouched during migration", async () => {
@@ -247,8 +403,8 @@ describe("connection lifecycle", () => {
     indexedDB = new IDBFactory()
 
     const data = await hydrate()
-    expect(Object.keys(data.spools)).toHaveLength(0)
-    expect(Object.keys(data.brands)).toHaveLength(0)
+    expect(Object.keys(data.spools)).toHaveLength(25)
+    expect(Object.keys(data.brands)).toHaveLength(3)
   })
 
   it("surfaces a toast while an old open connection blocks the upgrade (blocked handler)", async () => {
