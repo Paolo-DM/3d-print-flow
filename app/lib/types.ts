@@ -18,10 +18,23 @@ export interface Figure {
   requiredColors: string[]
 }
 
+export interface Order {
+  id: string
+  /** Human-facing identity. Unique after trimming, case-insensitively. */
+  reference: string
+  customerName: string | null
+  platform: string | null
+  /** Local calendar date (`YYYY-MM-DD`), or null when the order is undated. */
+  dueDate: string | null
+  notes: string
+  createdAt: string
+}
+
 export interface QueueItem {
   id: string
   figureId: string
-  type: "stock" | "order"
+  /** null means stock; an order id keeps customer batches independent. */
+  orderId: string | null
   /** Integer 1..99 — copies of the figure this entry represents. */
   quantity: number
   /**

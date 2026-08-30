@@ -13,32 +13,52 @@ import {
   validateExportEnvelope,
   validateV1Envelope,
   validateV2Envelope,
+  validateV3Envelope,
 } from "~/lib/export-import"
 import fixture from "~/lib/fixtures/export-v1-2026-08-28.json"
 import v2Fixture from "~/lib/fixtures/export-v2-2026-08-29.json"
-import { fromJSON, store, toJSON } from "~/lib/store"
+import v3Fixture from "~/lib/fixtures/export-v3-2026-08-29.json"
+import {
+  _resetPersistence,
+  fromJSON,
+  setPersist,
+  store,
+  toJSON,
+} from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
 
 const mockReplaceAll = vi.fn()
+const mockWriteStore = vi.fn((..._args: unknown[]) => Promise.resolve())
+const mockWriteStores = vi.fn((..._args: unknown[]) => Promise.resolve())
 
 vi.mock("~/lib/db", () => ({
-  writeStore: vi.fn(() => Promise.resolve()),
+  writeStore: (...args: unknown[]) => mockWriteStore(...args),
+  writeStores: (...args: unknown[]) => mockWriteStores(...args),
   replaceAll: (...args: unknown[]) => mockReplaceAll(...args),
 }))
 
 function resetStore() {
+  setPersist(false)
   store.setState({
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
     dataGeneration: 0,
   })
+  _resetPersistence()
+  mockWriteStore.mockReset()
+  mockWriteStore.mockResolvedValue(undefined)
+  mockWriteStores.mockReset()
+  mockWriteStores.mockResolvedValue(undefined)
+  setPersist(true)
 }
 
 function fileFrom(payload: unknown): File {
@@ -62,9 +82,9 @@ describe("buildExportData", () => {
     expect(Object.keys(result)).toEqual(["version", "exportedAt", "data"])
   })
 
-  it("version is exactly 3", () => {
+  it("version is exactly 4", () => {
     const result = buildExportData()
-    expect(result.version).toBe(3)
+    expect(result.version).toBe(4)
   })
 
   it("exportedAt is a valid ISO 8601 UTC string", () => {
@@ -74,7 +94,7 @@ describe("buildExportData", () => {
     expect(result.exportedAt).toMatch(/Z$/)
   })
 
-  it("data contains serialized spools, brands, figures, and queueItems as Record<string, Entity>", () => {
+  it("data contains all five serialized entity collections", () => {
     const spool = createSpool({ id: "s1", name: "White PLA", hex: "#FFFFFF" })
     const brand = createBrand({ id: "b1", name: "Naruto" })
     const figure = createFigure({
@@ -86,7 +106,7 @@ describe("buildExportData", () => {
     const queueItem = createQueueItem({
       id: "q1",
       figureId: "f1",
-      type: "stock",
+      orderId: null,
     })
 
     store.setState({
@@ -101,6 +121,7 @@ describe("buildExportData", () => {
     expect(result.data.spools).toEqual({ s1: spool })
     expect(result.data.brands).toEqual({ b1: brand })
     expect(result.data.figures).toEqual({ f1: figure })
+    expect(result.data.orders).toEqual({})
     expect(result.data.queueItems).toEqual({ q1: queueItem })
   })
 
@@ -117,7 +138,7 @@ describe("buildExportData", () => {
     const queueItem = createQueueItem({
       id: "q1",
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       quantity: 2,
       completedCounts: { s1: 1 },
       completedAt: "2026-03-31T10:00:00.000Z",
@@ -194,15 +215,16 @@ function buildValidEnvelope() {
   const queueItem = createQueueItem({
     id: "q1",
     figureId: "f1",
-    type: "stock",
+    orderId: null,
   })
   return {
-    version: 3,
+    version: 4,
     exportedAt: "2026-03-31T00:00:00.000Z",
     data: {
       spools: { s1: spool },
       brands: { b1: brand },
       figures: { f1: figure },
+      orders: {},
       queueItems: { q1: queueItem },
     },
   }
@@ -268,8 +290,62 @@ function buildValidV2Envelope() {
 }
 
 describe("validateExportEnvelope", () => {
-  it("accepts valid v3 export data", () => {
+  it("accepts valid v4 export data", () => {
     expect(validateExportEnvelope(buildValidEnvelope())).toBe(true)
+  })
+
+  it("rejects record keys that disagree with embedded ids in every schema", () => {
+    const v1 = buildValidV1Envelope()
+    ;(v1.data as Record<string, unknown>).spools = {
+      wrong: v1.data.spools.s1,
+    }
+    expect(validateV1Envelope(v1)).toBe(false)
+
+    const v2 = buildValidV2Envelope()
+    ;(v2.data as Record<string, unknown>).figures = {
+      wrong: v2.data.figures.f1,
+    }
+    expect(validateV2Envelope(v2)).toBe(false)
+
+    const v3 = structuredClone(v3Fixture)
+    ;(v3.data as Record<string, unknown>).queueItems = {
+      wrong: v3.data.queueItems["queue-order"],
+    }
+    expect(validateV3Envelope(v3)).toBe(false)
+
+    const collections = ["spools", "brands", "figures", "queueItems"] as const
+    for (const collection of collections) {
+      const v4 = buildValidEnvelope()
+      const [first] = Object.values(v4.data[collection])
+      ;(v4.data as Record<string, unknown>)[collection] = { wrong: first }
+      expect(validateExportEnvelope(v4)).toBe(false)
+    }
+
+    const v4Order = buildValidEnvelope()
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    v4Order.data.orders = { wrong: order } as never
+    expect(validateExportEnvelope(v4Order)).toBe(false)
+  })
+
+  it("requires a canonical createdAt and accepts early local due dates", () => {
+    const valid = buildValidEnvelope()
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      dueDate: "0001-01-01",
+    })
+    valid.data.orders = { [order.id]: order } as never
+    expect(validateExportEnvelope(valid)).toBe(true)
+
+    const nonCanonical = structuredClone(valid)
+    ;(
+      nonCanonical.data.orders as unknown as Record<
+        string,
+        { createdAt: string }
+      >
+    )[order.id].createdAt = "2026-08-30T10:00:00Z"
+    expect(validateExportEnvelope(nonCanonical)).toBe(false)
   })
 
   it("rejects v2 envelopes (handled by validateV2Envelope instead)", () => {
@@ -399,20 +475,61 @@ describe("validateExportEnvelope", () => {
 
   it("accepts empty entity collections", () => {
     const envelope = {
-      version: 3,
+      version: 4,
       exportedAt: "2026-03-31T00:00:00.000Z",
-      data: { spools: {}, brands: {}, figures: {}, queueItems: {} },
+      data: { spools: {}, brands: {}, figures: {}, orders: {}, queueItems: {} },
     }
     expect(validateExportEnvelope(envelope)).toBe(true)
   })
+
+  it("accepts linked orders and rejects invalid or duplicate references", () => {
+    const valid = buildValidEnvelope()
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+    })
+    ;(valid.data.orders as Record<string, unknown>)[order.id] = order
+    valid.data.queueItems.q1 = {
+      ...valid.data.queueItems.q1,
+      orderId: order.id,
+    }
+    expect(validateExportEnvelope(valid)).toBe(true)
+
+    for (const reference of ["", " padded "]) {
+      const invalid = structuredClone(valid)
+      ;(invalid.data.orders as Record<string, { reference: string }>)[
+        order.id
+      ].reference = reference
+      expect(validateExportEnvelope(invalid)).toBe(false)
+    }
+
+    const duplicate = structuredClone(valid)
+    const duplicateOrder = createOrder({
+      id: "00000000-0000-4000-8000-000000000002",
+      reference: "web-42",
+    })
+    ;(duplicate.data.orders as Record<string, unknown>)[duplicateOrder.id] =
+      duplicateOrder
+    expect(validateExportEnvelope(duplicate)).toBe(false)
+  })
+
+  it("rejects a queue link whose order is missing", () => {
+    const envelope = buildValidEnvelope()
+    envelope.data.queueItems.q1 = {
+      ...envelope.data.queueItems.q1,
+      orderId: "00000000-0000-4000-8000-000000000009",
+    }
+
+    expect(validateExportEnvelope(envelope)).toBe(false)
+  })
 })
 
-describe("v3 isValidQueueItem", () => {
-  function v3Item(overrides: Record<string, unknown> = {}) {
+describe("v4 isValidQueueItem", () => {
+  function v4Item(overrides: Record<string, unknown> = {}) {
     return {
       id: "q1",
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       quantity: 2,
       completedCounts: { s1: 1 },
       completedAt: null,
@@ -420,33 +537,33 @@ describe("v3 isValidQueueItem", () => {
     }
   }
 
-  it("accepts a valid v3 item, including one with absent completedAt", () => {
-    expect(isValidQueueItem(v3Item())).toBe(true)
-    const { completedAt: _, ...withoutCompletedAt } = v3Item()
+  it("accepts a valid v4 item, including one with absent completedAt", () => {
+    expect(isValidQueueItem(v4Item())).toBe(true)
+    const { completedAt: _, ...withoutCompletedAt } = v4Item()
     expect(isValidQueueItem(withoutCompletedAt)).toBe(true)
   })
 
   it("rejects a non-integer quantity", () => {
-    expect(isValidQueueItem(v3Item({ quantity: 1.5 }))).toBe(false)
-    expect(isValidQueueItem(v3Item({ quantity: "2" }))).toBe(false)
+    expect(isValidQueueItem(v4Item({ quantity: 1.5 }))).toBe(false)
+    expect(isValidQueueItem(v4Item({ quantity: "2" }))).toBe(false)
   })
 
   it("rejects quantity 0 and quantity 100", () => {
-    expect(isValidQueueItem(v3Item({ quantity: 0 }))).toBe(false)
-    expect(isValidQueueItem(v3Item({ quantity: 100 }))).toBe(false)
+    expect(isValidQueueItem(v4Item({ quantity: 0 }))).toBe(false)
+    expect(isValidQueueItem(v4Item({ quantity: 100 }))).toBe(false)
   })
 
   it("rejects a count above quantity", () => {
     expect(
-      isValidQueueItem(v3Item({ quantity: 2, completedCounts: { s1: 3 } }))
+      isValidQueueItem(v4Item({ quantity: 2, completedCounts: { s1: 3 } }))
     ).toBe(false)
   })
 
   it("rejects negative and non-integer counts", () => {
-    expect(isValidQueueItem(v3Item({ completedCounts: { s1: -1 } }))).toBe(
+    expect(isValidQueueItem(v4Item({ completedCounts: { s1: -1 } }))).toBe(
       false
     )
-    expect(isValidQueueItem(v3Item({ completedCounts: { s1: 0.5 } }))).toBe(
+    expect(isValidQueueItem(v4Item({ completedCounts: { s1: 0.5 } }))).toBe(
       false
     )
   })
@@ -457,7 +574,7 @@ describe("v3 isValidQueueItem", () => {
 
   it("tolerates count keys outside any figure's requiredColors", () => {
     expect(
-      isValidQueueItem(v3Item({ completedCounts: { "s-stale": 1 } }))
+      isValidQueueItem(v4Item({ completedCounts: { "s-stale": 1 } }))
     ).toBe(true)
   })
 })
@@ -468,7 +585,7 @@ describe("rebuildQueueItems", () => {
       q1: {
         id: "q1",
         figureId: "f1",
-        type: "order",
+        orderId: "00000000-0000-4000-8000-000000000001",
         quantity: 2,
         completedCounts: { s1: 1 },
         completedAt: null,
@@ -478,7 +595,7 @@ describe("rebuildQueueItems", () => {
     expect(result.q1).toEqual({
       id: "q1",
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       quantity: 2,
       completedCounts: { s1: 1 },
       completedAt: null,
@@ -491,7 +608,7 @@ describe("rebuildQueueItems", () => {
       q1: {
         id: "q1",
         figureId: "f1",
-        type: "order",
+        orderId: "00000000-0000-4000-8000-000000000001",
         quantity: 2,
         completedCounts: { a: 5, b: -1, c: 1.5, d: 1 },
         completedAt: null,
@@ -505,7 +622,7 @@ describe("rebuildQueueItems", () => {
       q1: {
         id: "q1",
         figureId: "f1",
-        type: "stock",
+        orderId: null,
         quantity: 1,
         completedCounts: { "s-stale": 1 },
         completedAt: null,
@@ -602,6 +719,28 @@ describe("importData", () => {
     await importData(fileFrom(envelope))
 
     expect(mockReplaceAll).toHaveBeenCalledWith(envelope.data)
+  })
+
+  it("waits for pending persistence before replacing the database", async () => {
+    let releaseWrite!: () => void
+    mockWriteStores.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseWrite = resolve
+        })
+    )
+    mockReplaceAll.mockResolvedValue(undefined)
+
+    store.getState().createSpool({ name: "Pending", hex: "#112233" })
+    const importing = importData(fileFrom(buildValidEnvelope()))
+    await vi.waitFor(() => expect(mockWriteStores).toHaveBeenCalled())
+    await Promise.resolve()
+    expect(mockReplaceAll).not.toHaveBeenCalled()
+
+    releaseWrite()
+    await importing
+    expect(mockReplaceAll).toHaveBeenCalledTimes(1)
+    expect(store.getState().spools.has("s1")).toBe(true)
   })
 
   it("strips a stray franchise key from v2 figures", async () => {
@@ -756,8 +895,7 @@ describe("importData", () => {
       expect(figuresPerBrand("Naruto")).toEqual(["Kakashi"])
       expect(figuresPerBrand("Dragon Ball")).toEqual(["Goku"])
 
-      // Spools pass through byte-identical; queue items map to v3:
-      // quantity 1, completed colors as counts of 1, completedAt verbatim
+      // Spools pass through byte-identical; queue progress survives v4.
       expect(Object.fromEntries(state.spools)).toEqual(fixture.data.spools)
       const expectedQueueItems = Object.fromEntries(
         Object.entries(fixture.data.queueItems).map(([id, qi]) => [
@@ -765,7 +903,6 @@ describe("importData", () => {
           {
             id: qi.id,
             figureId: qi.figureId,
-            type: qi.type,
             quantity: 1,
             completedCounts: Object.fromEntries(
               qi.completedColors.map((spoolId: string) => [spoolId, 1])
@@ -774,17 +911,34 @@ describe("importData", () => {
           },
         ])
       )
-      expect(Object.fromEntries(state.queueItems)).toEqual(expectedQueueItems)
+      const actualWithoutOrderIds = Object.fromEntries(
+        [...state.queueItems].map(([id, queueItem]) => {
+          const { orderId: _, ...rest } = queueItem
+          return [id, rest]
+        })
+      )
+      expect(actualWithoutOrderIds).toEqual(expectedQueueItems)
+      const legacyRows = fixture.data.queueItems as Record<
+        string,
+        { type: string }
+      >
+      for (const [id, queueItem] of state.queueItems) {
+        if (legacyRows[id].type === "stock") {
+          expect(queueItem.orderId).toBeNull()
+        } else {
+          expect(queueItem.orderId).toMatch(/^[0-9a-f-]{36}$/)
+        }
+      }
     })
 
-    it("re-importing a fresh v3 export of migrated v1 data restores identical state", async () => {
+    it("re-importing a fresh v4 export of migrated v1 data restores identical state", async () => {
       mockReplaceAll.mockResolvedValue(undefined)
 
       await importData(fileFrom(fixture))
       const migrated = toJSON()
 
       const reExport = JSON.parse(JSON.stringify(buildExportData()))
-      expect(reExport.version).toBe(3)
+      expect(reExport.version).toBe(4)
 
       resetStore()
       await importData(fileFrom(reExport))
@@ -807,7 +961,7 @@ describe("importData", () => {
       expect(state.queueItems.get("qi-buzz-a")).toEqual({
         id: "qi-buzz-a",
         figureId: "fig-buzz",
-        type: "order",
+        orderId: expect.any(String),
         quantity: 1,
         completedCounts: {},
         completedAt: null,
@@ -815,7 +969,7 @@ describe("importData", () => {
       expect(state.queueItems.get("qi-buzz-b")).toEqual({
         id: "qi-buzz-b",
         figureId: "fig-buzz",
-        type: "order",
+        orderId: expect.any(String),
         quantity: 1,
         completedCounts: { "sp-green": 1 },
         completedAt: null,
@@ -824,7 +978,7 @@ describe("importData", () => {
       expect(state.queueItems.get("qi-woody")).toEqual({
         id: "qi-woody",
         figureId: "fig-woody",
-        type: "stock",
+        orderId: null,
         quantity: 1,
         completedCounts: { "sp-green": 1, "sp-brown": 1 },
         completedAt: "2026-08-20T10:30:00.000Z",
@@ -835,14 +989,14 @@ describe("importData", () => {
       })
     })
 
-    it("v2 fixture import → export produces equivalent v3 data that re-imports unchanged", async () => {
+    it("v2 fixture import → export produces equivalent v4 data that re-imports unchanged", async () => {
       mockReplaceAll.mockResolvedValue(undefined)
 
       await importData(fileFrom(v2Fixture))
       const migrated = toJSON()
 
       const reExport = JSON.parse(JSON.stringify(buildExportData()))
-      expect(reExport.version).toBe(3)
+      expect(reExport.version).toBe(4)
       expect(validateExportEnvelope(reExport)).toBe(true)
 
       resetStore()
@@ -858,9 +1012,30 @@ describe("importData", () => {
 
       // qi-buzz-a and qi-buzz-b are both active fig-buzz orders — two rows
       const buzzRows = [...store.getState().queueItems.values()].filter(
-        (qi) => qi.figureId === "fig-buzz" && qi.type === "order"
+        (qi) => qi.figureId === "fig-buzz" && qi.orderId !== null
       )
       expect(buzzRows).toHaveLength(2)
+    })
+  })
+
+  describe("v3 imports", () => {
+    it("converts every legacy order row deterministically and preserves progress", async () => {
+      mockReplaceAll.mockResolvedValue(undefined)
+
+      await importData(fileFrom(v3Fixture))
+      const first = toJSON()
+      const orderRow = first.queueItems["queue-order"]
+      expect(orderRow.orderId).toMatch(/^[0-9a-f-]{36}$/)
+      expect(orderRow.completedCounts).toEqual({ "sp-red": 1 })
+      expect(first.queueItems["queue-stock"].orderId).toBeNull()
+      expect(Object.values(first.orders)).toHaveLength(1)
+      expect(Object.values(first.orders)[0].reference).toBe(
+        "Imported · Demo Figure · queue-order"
+      )
+
+      resetStore()
+      await importData(fileFrom(v3Fixture))
+      expect(toJSON()).toEqual(first)
     })
   })
 
@@ -992,7 +1167,7 @@ describe("importData", () => {
     const originalSpool = createSpool({ id: "original" })
     store.setState({ spools: new Map([["original", originalSpool]]) })
 
-    const envelope = { ...buildValidEnvelope(), version: 4 }
+    const envelope = { ...buildValidEnvelope(), version: 5 }
     await expect(importData(fileFrom(envelope))).rejects.toThrow(
       "Invalid file format. Please select a file exported from 3D Print Flow."
     )

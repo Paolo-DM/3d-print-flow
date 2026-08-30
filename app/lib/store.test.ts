@@ -5,10 +5,19 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest"
 
 import * as db from "~/lib/db"
 import { brandKey } from "~/lib/migration"
-import { fromJSON, getPersist, setPersist, store, toJSON } from "~/lib/store"
+import {
+  _resetPersistence,
+  drainPersistence,
+  fromJSON,
+  getPersist,
+  setPersist,
+  store,
+  toJSON,
+} from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -16,6 +25,8 @@ import type { Figure, QueueItem } from "~/lib/types"
 
 vi.mock("~/lib/db", () => ({
   writeStore: vi.fn(() => Promise.resolve()),
+  writeStores: vi.fn(() => Promise.resolve()),
+  replaceAll: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock("sonner", () => ({
@@ -26,16 +37,23 @@ vi.mock("sonner", () => ({
 }))
 
 function resetStore() {
+  setPersist(false)
   store.setState({
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
     dataGeneration: 0,
+    announcement: "",
+    announcementVersion: 0,
   })
-  setPersist(true)
+  _resetPersistence()
   vi.clearAllMocks()
   vi.mocked(db.writeStore).mockReturnValue(Promise.resolve())
+  vi.mocked(db.writeStores).mockReturnValue(Promise.resolve())
+  vi.mocked(db.replaceAll).mockReturnValue(Promise.resolve())
+  setPersist(true)
 }
 
 afterEach(resetStore)
@@ -252,6 +270,80 @@ describe("store mutations", () => {
     expect(store.getState().queueItems.get("q1")?.completedAt).toBeNull()
   })
 
+  it("announces the references of Ready orders returned to active work by a live color edit", () => {
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+    })
+    const first = createSpool({ id: "s1" })
+    const added = createSpool({ id: "s2" })
+    const figure = createFigure({ id: "fig-1", requiredColors: [first.id] })
+    const queueItem = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: { [first.id]: 1 },
+      completedAt: "2026-08-01T10:00:00.000Z",
+    })
+    store.setState({
+      spools: new Map([
+        [first.id, first],
+        [added.id, added],
+      ]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([[queueItem.id, queueItem]]),
+      announcement: "",
+    })
+
+    store.getState().updateFigure(figure.id, {
+      requiredColors: [first.id, added.id],
+    })
+
+    expect(
+      store.getState().queueItems.get(queueItem.id)?.completedAt
+    ).toBeNull()
+    expect(store.getState().announcement).toContain("WEB-42")
+  })
+
+  it("increments the announcement version even when the message text repeats", () => {
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+    })
+    const first = createSpool({ id: "s1" })
+    const added = createSpool({ id: "s2" })
+    const figure = createFigure({ id: "fig-1", requiredColors: [first.id] })
+    const queueItem = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+    })
+    store.setState({
+      spools: new Map([
+        [first.id, first],
+        [added.id, added],
+      ]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([[queueItem.id, queueItem]]),
+      announcement: "",
+      announcementVersion: 0,
+    })
+
+    store.getState().updateFigure(figure.id, {
+      requiredColors: [first.id, added.id],
+    })
+    const firstMessage = store.getState().announcement
+    expect(store.getState().announcementVersion).toBe(1)
+
+    store.getState().updateFigure(figure.id, {
+      requiredColors: [first.id, added.id],
+    })
+    expect(store.getState().announcement).toBe(firstMessage)
+    expect(store.getState().announcementVersion).toBe(2)
+  })
+
   it("deleteFigure removes figure from figures Map", () => {
     const figure = createFigure({ id: "fig-1" })
     store.setState({ figures: new Map([["fig-1", figure]]) })
@@ -273,6 +365,31 @@ describe("store mutations", () => {
     store.getState().deleteFigure("fig-1")
     expect(store.getState().figures.size).toBe(0)
     expect(store.getState().queueItems.size).toBe(0)
+  })
+
+  it("announces affected order references when a figure cascade removes lines", () => {
+    const figure = createFigure({ id: "fig-1" })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+    })
+    const row = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+    })
+    store.setState({
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([[row.id, row]]),
+      announcement: "",
+      announcementVersion: 0,
+    })
+
+    store.getState().deleteFigure(figure.id)
+
+    expect(store.getState().announcement).toContain("WEB-42")
+    expect(store.getState().announcementVersion).toBe(1)
   })
 
   it("deleteFigure does not affect queue items for other figures", () => {
@@ -369,16 +486,16 @@ describe("brand lifecycle commands", () => {
 
   function writtenStores() {
     return vi
-      .mocked(db.writeStore)
-      .mock.calls.map((call) => call[0])
+      .mocked(db.writeStores)
+      .mock.calls.flatMap((call) => Object.keys(call[0]))
       .sort()
   }
 
   function lastWrite(name: "brands" | "figures") {
     const call = vi
-      .mocked(db.writeStore)
-      .mock.calls.findLast((c) => c[0] === name)
-    return call?.[1]
+      .mocked(db.writeStores)
+      .mock.calls.findLast((candidate) => candidate[0][name])
+    return call?.[0][name]
   }
 
   /** The invariant every command must leave intact. */
@@ -419,7 +536,7 @@ describe("brand lifecycle commands", () => {
         type: "unchanged",
       })
       expect(store.getState().brands).toBe(before)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
 
     it("rejects an empty or whitespace-only name without mutating", () => {
@@ -432,7 +549,7 @@ describe("brand lifecycle commands", () => {
         type: "invalid",
       })
       expect(store.getState().brands).toBe(before)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
 
     it("reports a collision with another brand and does not mutate", () => {
@@ -454,7 +571,7 @@ describe("brand lifecycle commands", () => {
       expect(store.getState().renameBrand("missing", "Anything")).toEqual({
         type: "not-found",
       })
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
 
     it("writes only the brands store", () => {
@@ -523,7 +640,7 @@ describe("brand lifecycle commands", () => {
       })
       expect(store.getState().brands).toBe(brands)
       expect(store.getState().figures).toBe(figures)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
 
     it("leaves a figure whose brandId resolves to no brand untouched", () => {
@@ -573,63 +690,236 @@ describe("brand lifecycle commands", () => {
 
   it("a delete whose figures write rejects notifies and converges on retry", async () => {
     seed([createFigure({ id: "f1", brandId: naruto.id })])
-    vi.mocked(db.writeStore).mockImplementation((name) =>
-      name === "figures"
-        ? Promise.reject(new Error("IDB failure"))
-        : Promise.resolve()
-    )
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
 
     store.getState().deleteBrand(naruto.id)
 
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
 
     const actionArg = (toast.error as Mock).mock.calls[0][1]
-    vi.mocked(db.writeStore).mockClear()
-    vi.mocked(db.writeStore).mockImplementation(() => Promise.resolve())
+    vi.mocked(db.replaceAll).mockClear()
+    vi.mocked(db.replaceAll).mockResolvedValue(undefined)
     actionArg.action.onClick()
 
     await vi.waitFor(() =>
       expect(toast.dismiss).toHaveBeenCalledWith("persistence-failure")
     )
 
-    expect(writtenStores()).toEqual([
-      "brands",
-      "figures",
-      "queueItems",
-      "spools",
-    ])
-    expect(lastWrite("brands")?.has(naruto.id)).toBe(false)
-    const persistedFigures = lastWrite("figures") as
-      | Map<string, Figure>
-      | undefined
-    expect(persistedFigures?.get("f1")?.brandId).toBeNull()
+    const retry = vi.mocked(db.replaceAll).mock.calls[0][0]
+    expect(retry.brands[naruto.id]).toBeUndefined()
+    expect(retry.figures.f1.brandId).toBeNull()
+  })
+})
+
+describe("order mutations", () => {
+  it("creates trimmed optional fields and enforces case-insensitive references", () => {
+    const created = store.getState().createOrder({
+      reference: "  WEB-42  ",
+      customerName: "  Ada  ",
+      platform: " Etsy ",
+      notes: "  fragile  ",
+    })
+    expect(created).toMatchObject({
+      type: "created",
+      order: {
+        reference: "WEB-42",
+        customerName: "Ada",
+        platform: "Etsy",
+        notes: "fragile",
+      },
+    })
+    expect(store.getState().createOrder({ reference: " web-42 " })).toEqual({
+      type: "collision",
+    })
+  })
+
+  it("updates an order without changing its id or creation timestamp", () => {
+    const original = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "ORD-001",
+    })
+    store.setState({ orders: new Map([[original.id, original]]) })
+
+    const result = store.getState().updateOrder(original.id, {
+      reference: "CUSTOM-7",
+      dueDate: "2026-09-10",
+    })
+
+    expect(result).toMatchObject({
+      type: "updated",
+      order: {
+        id: original.id,
+        createdAt: original.createdAt,
+        reference: "CUSTOM-7",
+        dueDate: "2026-09-10",
+      },
+    })
+    expect(
+      store.getState().updateOrder(original.id, { dueDate: "2026-02-30" })
+    ).toEqual({ type: "invalid", field: "dueDate" })
+  })
+
+  it("clears nullable order fields when an update explicitly passes null", () => {
+    const original = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      customerName: "Ada",
+      platform: "Etsy",
+      dueDate: "2026-09-10",
+    })
+    store.setState({ orders: new Map([[original.id, original]]) })
+
+    const result = store.getState().updateOrder(original.id, {
+      customerName: null,
+      platform: null,
+      dueDate: null,
+    })
+
+    expect(result).toMatchObject({
+      type: "updated",
+      order: { customerName: null, platform: null, dueDate: null },
+    })
+  })
+
+  it("deletes an order and all of its queue lines in one mutation", () => {
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const linked = createQueueItem({ id: "linked", orderId: order.id })
+    const stock = createQueueItem({ id: "stock" })
+    store.setState({
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [linked.id, linked],
+        [stock.id, stock],
+      ]),
+    })
+
+    expect(store.getState().deleteOrder(order.id)).toEqual({
+      type: "deleted",
+      removedLines: 1,
+    })
+    expect(store.getState().orders).toEqual(new Map())
+    expect([...store.getState().queueItems.keys()]).toEqual([stock.id])
+  })
+
+  it("duplicates lines under a unique editable reference at zero progress", () => {
+    const source = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "ORD-009",
+    })
+    const row = createQueueItem({
+      id: "source-line",
+      figureId: "figure",
+      orderId: source.id,
+      quantity: 3,
+      completedCounts: { red: 3 },
+      completedAt: "2026-08-30T10:00:00.000Z",
+    })
+    store.setState({
+      orders: new Map([[source.id, source]]),
+      queueItems: new Map([[row.id, row]]),
+    })
+
+    const result = store.getState().duplicateOrder(source.id)
+    expect(result).toMatchObject({
+      type: "duplicated",
+      order: { reference: "ORD-010" },
+      lines: 1,
+    })
+    if (result.type !== "duplicated") throw new Error("expected duplicate")
+    const fresh = [...store.getState().queueItems.values()].find(
+      (item) => item.orderId === result.order.id
+    )!
+    expect(fresh).toMatchObject({
+      figureId: "figure",
+      quantity: 3,
+      completedCounts: {},
+      completedAt: null,
+    })
+    expect(store.getState().queueItems.get(row.id)).toEqual(row)
+  })
+
+  it("preserves duplicate-order totals above 99 by splitting zero-progress lines", () => {
+    const source = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "ORD-009",
+    })
+    const first = createQueueItem({
+      id: "source-a",
+      figureId: "figure",
+      orderId: source.id,
+      quantity: 70,
+    })
+    const second = createQueueItem({
+      id: "source-b",
+      figureId: "figure",
+      orderId: source.id,
+      quantity: 50,
+    })
+    store.setState({
+      orders: new Map([[source.id, source]]),
+      queueItems: new Map([
+        [first.id, first],
+        [second.id, second],
+      ]),
+    })
+
+    const result = store.getState().duplicateOrder(source.id)
+    expect(result).toMatchObject({ type: "duplicated", lines: 2 })
+    if (result.type !== "duplicated") throw new Error("expected duplicate")
+    const copied = [...store.getState().queueItems.values()].filter(
+      (row) => row.orderId === result.order.id
+    )
+    expect(copied.map((row) => row.quantity).toSorted((a, b) => b - a)).toEqual(
+      [99, 21]
+    )
+    expect(copied.reduce((sum, row) => sum + row.quantity, 0)).toBe(120)
+    expect(copied.every((row) => row.completedAt === null)).toBe(true)
   })
 })
 
 describe("queue mutations", () => {
+  const TEST_ORDER_ID = "00000000-0000-4000-8000-000000000001"
+
+  function orderTarget(): string {
+    if (!store.getState().orders.has(TEST_ORDER_ID)) {
+      const order = createOrder({ id: TEST_ORDER_ID })
+      const wasPersisting = getPersist()
+      setPersist(false)
+      store.setState({
+        orders: new Map([...store.getState().orders, [order.id, order]]),
+      })
+      setPersist(wasPersisting)
+    }
+    return TEST_ORDER_ID
+  }
+
   /** Seed a figure so queue commands pass their figure guards. */
   function seedFigure(
     id = "fig-1",
     requiredColors: string[] = ["s1"]
   ): ReturnType<typeof createFigure> {
     const figure = createFigure({ id, requiredColors })
+    const wasPersisting = getPersist()
+    setPersist(false)
     store.setState({
       figures: new Map([...store.getState().figures, [figure.id, figure]]),
     })
+    setPersist(wasPersisting)
     return figure
   }
 
   describe("addToQueue", () => {
     it("creates a QueueItem with quantity 1, empty counts, and UUID", () => {
       seedFigure("fig-1")
-      const result = store.getState().addToQueue("fig-1", "stock")
+      const result = store.getState().addToQueue("fig-1", null)
       expect(result).toEqual({ type: "created" })
       const items = store.getState().queueItems
       expect(items.size).toBe(1)
       const item = [...items.values()][0]
       expect(item.id).toBeTruthy()
       expect(item.figureId).toBe("fig-1")
-      expect(item.type).toBe("stock")
+      expect(item.orderId).toBeNull()
       expect(item.quantity).toBe(1)
       expect(item.completedCounts).toEqual({})
       expect(item.completedAt).toBeNull()
@@ -637,20 +927,20 @@ describe("queue mutations", () => {
 
     it("accepts an explicit quantity on create, clamped to 99", () => {
       seedFigure("fig-1")
-      store.getState().addToQueue("fig-1", "order", 15)
+      store.getState().addToQueue("fig-1", orderTarget(), 15)
       expect([...store.getState().queueItems.values()][0].quantity).toBe(15)
 
       store.setState({ queueItems: new Map() })
-      store.getState().addToQueue("fig-1", "order", 250)
+      store.getState().addToQueue("fig-1", orderTarget(), 250)
       expect([...store.getState().queueItems.values()][0].quantity).toBe(99)
     })
 
     it("rejects a missing figure and a figure with no required colors", () => {
       seedFigure("fig-colorless", [])
-      expect(store.getState().addToQueue("missing", "stock")).toEqual({
+      expect(store.getState().addToQueue("missing", null)).toEqual({
         type: "rejected",
       })
-      expect(store.getState().addToQueue("fig-colorless", "stock")).toEqual({
+      expect(store.getState().addToQueue("fig-colorless", null)).toEqual({
         type: "rejected",
       })
       expect(store.getState().queueItems.size).toBe(0)
@@ -659,9 +949,9 @@ describe("queue mutations", () => {
     it("rejects non-integer or non-finite quantity without mutating", () => {
       seedFigure("fig-1")
       for (const quantity of [1.5, NaN, Infinity, -Infinity]) {
-        expect(store.getState().addToQueue("fig-1", "stock", quantity)).toEqual(
-          { type: "invalid" }
-        )
+        expect(store.getState().addToQueue("fig-1", null, quantity)).toEqual({
+          type: "invalid",
+        })
       }
       expect(store.getState().queueItems.size).toBe(0)
     })
@@ -671,13 +961,13 @@ describe("queue mutations", () => {
       const existing = createQueueItem({
         id: "q1",
         figureId: "fig-1",
-        type: "order",
+        orderId: orderTarget(),
         quantity: 2,
         completedCounts: { s1: 1 },
       })
       store.setState({ queueItems: new Map([["q1", existing]]) })
 
-      const result = store.getState().addToQueue("fig-1", "order")
+      const result = store.getState().addToQueue("fig-1", orderTarget())
 
       expect(result).toEqual({ type: "merged", quantity: 3, clamped: false })
       expect(store.getState().queueItems.size).toBe(1)
@@ -692,14 +982,39 @@ describe("queue mutations", () => {
       const existing = createQueueItem({
         id: "q1",
         figureId: "fig-1",
-        type: "stock",
+        orderId: null,
       })
       store.setState({ queueItems: new Map([["q1", existing]]) })
 
-      expect(store.getState().addToQueue("fig-1", "order")).toEqual({
+      expect(store.getState().addToQueue("fig-1", orderTarget())).toEqual({
         type: "created",
       })
       expect(store.getState().queueItems.size).toBe(2)
+    })
+
+    it("rejects adding new work to a Ready historical order", () => {
+      const figure = seedFigure("fig-1", ["s1"])
+      const spool = createSpool({ id: "s1" })
+      const order = createOrder({ id: TEST_ORDER_ID })
+      const completed = createQueueItem({
+        id: "completed",
+        figureId: figure.id,
+        orderId: order.id,
+        completedCounts: { [spool.id]: 1 },
+        completedAt: "2026-08-30T10:00:00.000Z",
+      })
+      store.setState({
+        spools: new Map([[spool.id, spool]]),
+        orders: new Map([[order.id, order]]),
+        queueItems: new Map([[completed.id, completed]]),
+      })
+
+      expect(store.getState().addToQueue(figure.id, order.id)).toEqual({
+        type: "rejected",
+      })
+      expect(store.getState().queueItems).toEqual(
+        new Map([[completed.id, completed]])
+      )
     })
 
     it("never merges into a completed-by-derivation entry", () => {
@@ -707,14 +1022,14 @@ describe("queue mutations", () => {
       const completed = createQueueItem({
         id: "q1",
         figureId: "fig-1",
-        type: "stock",
+        orderId: null,
         quantity: 1,
         completedCounts: { s1: 1 },
         completedAt: "2026-08-01T10:00:00.000Z",
       })
       store.setState({ queueItems: new Map([["q1", completed]]) })
 
-      expect(store.getState().addToQueue("fig-1", "stock")).toEqual({
+      expect(store.getState().addToQueue("fig-1", null)).toEqual({
         type: "created",
       })
       expect(store.getState().queueItems.size).toBe(2)
@@ -723,8 +1038,8 @@ describe("queue mutations", () => {
 
     it("with several active candidates the smallest id receives the merge", () => {
       seedFigure("fig-1", ["s1"])
-      const a = createQueueItem({ id: "qa", figureId: "fig-1", type: "stock" })
-      const b = createQueueItem({ id: "qb", figureId: "fig-1", type: "stock" })
+      const a = createQueueItem({ id: "qa", figureId: "fig-1" })
+      const b = createQueueItem({ id: "qb", figureId: "fig-1" })
       store.setState({
         queueItems: new Map([
           ["qb", b],
@@ -732,7 +1047,7 @@ describe("queue mutations", () => {
         ]),
       })
 
-      store.getState().addToQueue("fig-1", "stock")
+      store.getState().addToQueue("fig-1", null)
 
       expect(store.getState().queueItems.get("qa")?.quantity).toBe(2)
       expect(store.getState().queueItems.get("qb")?.quantity).toBe(1)
@@ -743,12 +1058,12 @@ describe("queue mutations", () => {
       const existing = createQueueItem({
         id: "q1",
         figureId: "fig-1",
-        type: "stock",
+        orderId: null,
         quantity: 98,
       })
       store.setState({ queueItems: new Map([["q1", existing]]) })
 
-      expect(store.getState().addToQueue("fig-1", "stock", 2)).toEqual({
+      expect(store.getState().addToQueue("fig-1", null, 2)).toEqual({
         type: "merged",
         quantity: 99,
         clamped: true,
@@ -926,7 +1241,7 @@ describe("queue mutations", () => {
       vi.clearAllMocks()
       store.getState().toggleChip("q1", "s-unknown")
       expect(store.getState().queueItems).toBe(before)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
   })
 
@@ -1040,6 +1355,7 @@ describe("queue mutations", () => {
       seedFigure("fig-a", ["s1"])
       seedFigure("fig-b", ["s2"])
       seedFigure("fig-c", ["s1", "s2"])
+      const orderId = orderTarget()
       vi.clearAllMocks()
 
       let notifications = 0
@@ -1054,7 +1370,7 @@ describe("queue mutations", () => {
             { figureId: "fig-b", quantity: 1 },
             { figureId: "fig-c", quantity: 1 },
           ],
-          "order"
+          orderId
         )
         expect(notifications).toBe(1)
       } finally {
@@ -1070,12 +1386,12 @@ describe("queue mutations", () => {
       })
       const items = [...store.getState().queueItems.values()]
       expect(items).toHaveLength(3)
-      expect(items.every((qi) => qi.type === "order")).toBe(true)
+      expect(items.every((qi) => qi.orderId === TEST_ORDER_ID)).toBe(true)
       expect(items.find((qi) => qi.figureId === "fig-a")?.quantity).toBe(2)
       expect(
         vi
-          .mocked(db.writeStore)
-          .mock.calls.filter((call) => call[0] === "queueItems")
+          .mocked(db.writeStores)
+          .mock.calls.filter((call) => call[0].queueItems)
       ).toHaveLength(1)
     })
 
@@ -1087,7 +1403,7 @@ describe("queue mutations", () => {
           { figureId: "fig-a", quantity: 1 },
           { figureId: "fig-a", quantity: 2 },
         ],
-        "order"
+        orderTarget()
       )
 
       expect(result).toEqual({
@@ -1102,11 +1418,44 @@ describe("queue mutations", () => {
 
     it("an empty batch is a no-op", () => {
       const before = store.getState().queueItems
-      expect(store.getState().addBatchToQueue([], "order")).toEqual({
+      expect(store.getState().addBatchToQueue([], TEST_ORDER_ID)).toEqual({
         type: "empty",
       })
       expect(store.getState().queueItems).toBe(before)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
+    })
+
+    it("skips every line when the target is a Ready historical order", () => {
+      const figure = seedFigure("fig-a", ["s1"])
+      const spool = createSpool({ id: "s1" })
+      const order = createOrder({ id: TEST_ORDER_ID })
+      const completed = createQueueItem({
+        id: "completed",
+        figureId: figure.id,
+        orderId: order.id,
+        completedCounts: { [spool.id]: 1 },
+        completedAt: "2026-08-30T10:00:00.000Z",
+      })
+      store.setState({
+        spools: new Map([[spool.id, spool]]),
+        orders: new Map([[order.id, order]]),
+        queueItems: new Map([[completed.id, completed]]),
+      })
+
+      expect(
+        store
+          .getState()
+          .addBatchToQueue([{ figureId: figure.id, quantity: 1 }], order.id)
+      ).toEqual({
+        type: "queued",
+        pieces: 0,
+        created: 0,
+        merged: 0,
+        skipped: [figure.id],
+      })
+      expect(store.getState().queueItems).toEqual(
+        new Map([[completed.id, completed]])
+      )
     })
 
     it("skips missing and colorless figures and reports their ids", () => {
@@ -1119,7 +1468,7 @@ describe("queue mutations", () => {
           { figureId: "fig-colorless", quantity: 2 },
           { figureId: "fig-missing", quantity: 3 },
         ],
-        "order"
+        orderTarget()
       )
 
       expect(result).toEqual({
@@ -1138,7 +1487,7 @@ describe("queue mutations", () => {
       const existing = createQueueItem({
         id: "q1",
         figureId: "fig-a",
-        type: "order",
+        orderId: orderTarget(),
         quantity: 1,
       })
       store.setState({ queueItems: new Map([["q1", existing]]) })
@@ -1148,7 +1497,7 @@ describe("queue mutations", () => {
           { figureId: "fig-a", quantity: 2 },
           { figureId: "fig-b", quantity: 1 },
         ],
-        "order"
+        orderTarget()
       )
 
       expect(result).toEqual({
@@ -1167,14 +1516,14 @@ describe("queue mutations", () => {
       const existing = createQueueItem({
         id: "q1",
         figureId: "fig-a",
-        type: "order",
+        orderId: orderTarget(),
         quantity: 98,
       })
       store.setState({ queueItems: new Map([["q1", existing]]) })
 
       const result = store
         .getState()
-        .addBatchToQueue([{ figureId: "fig-a", quantity: 5 }], "order")
+        .addBatchToQueue([{ figureId: "fig-a", quantity: 5 }], orderTarget())
 
       expect(result).toEqual({
         type: "queued",
@@ -1186,11 +1535,40 @@ describe("queue mutations", () => {
       expect(store.getState().queueItems.get("q1")?.quantity).toBe(99)
     })
 
-    it("a batch of only skipped entries mutates nothing", () => {
+    it("reports a full merge target as skipped without claiming queued pieces", () => {
+      seedFigure("fig-a", ["s1"])
+      const existing = createQueueItem({
+        id: "q1",
+        figureId: "fig-a",
+        orderId: orderTarget(),
+        quantity: 99,
+      })
+      store.setState({ queueItems: new Map([[existing.id, existing]]) })
       const before = store.getState().queueItems
+
       const result = store
         .getState()
-        .addBatchToQueue([{ figureId: "fig-missing", quantity: 1 }], "order")
+        .addBatchToQueue([{ figureId: "fig-a", quantity: 1 }], orderTarget())
+
+      expect(result).toEqual({
+        type: "queued",
+        pieces: 0,
+        created: 0,
+        merged: 0,
+        skipped: ["fig-a"],
+      })
+      expect(store.getState().queueItems).toBe(before)
+    })
+
+    it("a batch of only skipped entries mutates nothing", () => {
+      const before = store.getState().queueItems
+      vi.clearAllMocks()
+      const result = store
+        .getState()
+        .addBatchToQueue(
+          [{ figureId: "fig-missing", quantity: 1 }],
+          TEST_ORDER_ID
+        )
       expect(result).toEqual({
         type: "queued",
         pieces: 0,
@@ -1199,7 +1577,7 @@ describe("queue mutations", () => {
         skipped: ["fig-missing"],
       })
       expect(store.getState().queueItems).toBe(before)
-      expect(db.writeStore).not.toHaveBeenCalled()
+      expect(db.writeStores).not.toHaveBeenCalled()
     })
 
     it("queues the sample order: 12 figures, 15 pieces, three entries at ×2", () => {
@@ -1224,7 +1602,7 @@ describe("queue mutations", () => {
         quantity: ["buzz", "woody", "kratos"].includes(name) ? 2 : 1,
       }))
 
-      const result = store.getState().addBatchToQueue(entries, "order")
+      const result = store.getState().addBatchToQueue(entries, orderTarget())
 
       expect(result).toEqual({
         type: "queued",
@@ -1246,7 +1624,7 @@ describe("queue mutations", () => {
       const q1 = createQueueItem({
         id: "q1",
         figureId: "fig-1",
-        type: "order",
+        orderId: null,
         quantity,
         completedCounts: { s1: quantity, s2: quantity },
         completedAt: "2026-08-01T10:00:00.000Z",
@@ -1270,7 +1648,7 @@ describe("queue mutations", () => {
       expect(items).toHaveLength(2)
       const fresh = items.find((qi) => qi.id !== "q1")!
       expect(fresh.figureId).toBe("fig-1")
-      expect(fresh.type).toBe("order")
+      expect(fresh.orderId).toBeNull()
       expect(fresh.quantity).toBe(2)
       expect(fresh.completedCounts).toEqual({})
       expect(fresh.completedAt).toBeNull()
@@ -1282,7 +1660,7 @@ describe("queue mutations", () => {
       const active = createQueueItem({
         id: "q0",
         figureId: "fig-1",
-        type: "order",
+        orderId: null,
         quantity: 1,
         completedCounts: { s1: 1 },
       })
@@ -1310,7 +1688,7 @@ describe("queue mutations", () => {
       const active = createQueueItem({
         id: "q0",
         figureId: "fig-1",
-        type: "order",
+        orderId: null,
         quantity: 98,
       })
       store.setState({
@@ -1347,22 +1725,55 @@ describe("queue mutations", () => {
 })
 
 describe("persistence flag", () => {
-  it("_persist = true triggers writeStore on mutation", () => {
-    setPersist(true)
-    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
-    expect(db.writeStore).toHaveBeenCalledWith("spools", expect.any(Map))
+  it("serializes rapid mutations with immutable snapshots in mutation order", async () => {
+    let releaseFirst!: () => void
+    const firstWrite = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    vi.mocked(db.writeStores)
+      .mockImplementationOnce(() => firstWrite)
+      .mockResolvedValue(undefined)
+
+    const created = store
+      .getState()
+      .createOrder({ reference: "FIRST", customerName: "Ada" })
+    if (created.type !== "created") throw new Error("expected create")
+    store.getState().updateOrder(created.order.id, {
+      reference: "SECOND",
+      customerName: "Ada",
+    })
+
+    expect(db.writeStores).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(db.writeStores).mock.calls[0][0].orders?.get(created.order.id)
+        ?.reference
+    ).toBe("FIRST")
+
+    releaseFirst()
+    await drainPersistence()
+    expect(db.writeStores).toHaveBeenCalledTimes(2)
+    expect(
+      vi.mocked(db.writeStores).mock.calls[1][0].orders?.get(created.order.id)
+        ?.reference
+    ).toBe("SECOND")
   })
 
-  it("_persist = false suppresses writeStore on mutation", () => {
+  it("_persist = true triggers a transactional store write on mutation", () => {
+    setPersist(true)
+    store.getState().createSpool({ name: "Red", hex: "#FF0000" })
+    expect(db.writeStores).toHaveBeenCalledWith({ spools: expect.any(Map) })
+  })
+
+  it("_persist = false suppresses transactional writes on mutation", () => {
     setPersist(false)
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
-    expect(db.writeStore).not.toHaveBeenCalled()
+    expect(db.writeStores).not.toHaveBeenCalled()
   })
 
-  it("brand creation triggers writeStore for the brands store", () => {
+  it("brand creation writes the brands store", () => {
     setPersist(true)
     store.getState().createBrand("One Piece")
-    expect(db.writeStore).toHaveBeenCalledWith("brands", expect.any(Map))
+    expect(db.writeStores).toHaveBeenCalledWith({ brands: expect.any(Map) })
   })
 
   it("getPersist returns current flag value", () => {
@@ -1400,6 +1811,7 @@ describe("serialization", () => {
       spools: { [spool.id]: spool },
       brands: { [brand.id]: brand },
       figures: { [figure.id]: figure },
+      orders: {},
       queueItems: { [queueItem.id]: queueItem },
     })
 
@@ -1410,7 +1822,13 @@ describe("serialization", () => {
   })
 
   it("fromJSON increments dataGeneration on every full replace", () => {
-    const empty = { spools: {}, brands: {}, figures: {}, queueItems: {} }
+    const empty = {
+      spools: {},
+      brands: {},
+      figures: {},
+      orders: {},
+      queueItems: {},
+    }
     expect(store.getState().dataGeneration).toBe(0)
     fromJSON(empty)
     expect(store.getState().dataGeneration).toBe(1)
@@ -1420,16 +1838,16 @@ describe("serialization", () => {
 
   it("fromJSON backfills v3 defaults (quantity, counts, completedAt) for sparse rows", () => {
     const figure = createFigure()
-    const sparseQueueItem: Pick<QueueItem, "id" | "figureId" | "type"> = {
+    const sparseQueueItem: Pick<QueueItem, "id" | "figureId"> = {
       id: "q1",
       figureId: figure.id,
-      type: "stock",
     }
 
     fromJSON({
       spools: {},
       brands: {},
       figures: { [figure.id]: figure },
+      orders: {},
       queueItems: {
         [sparseQueueItem.id]: sparseQueueItem as unknown as QueueItem,
       },
@@ -1457,8 +1875,8 @@ describe("serialization", () => {
 })
 
 describe("persistence failure notification", () => {
-  it("calls toast.error when writeStore rejects", async () => {
-    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+  it("calls toast.error when a transaction rejects", async () => {
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
     expect(toast.error).toHaveBeenCalledWith(
@@ -1470,7 +1888,7 @@ describe("persistence failure notification", () => {
   })
 
   it("toast uses fixed ID and duration: Infinity", async () => {
-    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
     expect(toast.error).toHaveBeenCalledWith(
@@ -1482,7 +1900,7 @@ describe("persistence failure notification", () => {
     )
   })
 
-  it("multi-store failures reuse the fixed toast ID", async () => {
+  it("a multi-store transaction reports one fixed-ID failure", async () => {
     const figure = createFigure({ id: "fig-1" })
     const queueItem = createQueueItem({ id: "q1", figureId: figure.id })
 
@@ -1493,53 +1911,45 @@ describe("persistence failure notification", () => {
     })
     setPersist(true)
     vi.clearAllMocks()
-    vi.mocked(db.writeStore)
-      .mockRejectedValueOnce(new Error("IDB failure"))
-      .mockRejectedValueOnce(new Error("IDB failure"))
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
 
     store.getState().deleteFigure(figure.id)
 
-    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2))
-    expect((toast.error as Mock).mock.calls).toEqual([
-      [
-        "Changes saved in memory but not persisted",
-        expect.objectContaining({ id: "persistence-failure" }),
-      ],
-      [
-        "Changes saved in memory but not persisted",
-        expect.objectContaining({ id: "persistence-failure" }),
-      ],
-    ])
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect(toast.error).toHaveBeenCalledWith(
+      "Changes saved in memory but not persisted",
+      expect.objectContaining({ id: "persistence-failure" })
+    )
   })
 
-  it("retry success rewrites all four stores and dismisses the toast", async () => {
-    vi.mocked(db.writeStore).mockRejectedValueOnce(new Error("IDB failure"))
+  it("retry success rewrites one full five-map snapshot and dismisses the toast", async () => {
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
 
     // Reset mock so retry succeeds, and isolate the retry's own writes
     const actionArg = (toast.error as Mock).mock.calls[0][1]
-    vi.mocked(db.writeStore).mockClear()
-    vi.mocked(db.writeStore).mockResolvedValue(undefined)
+    vi.mocked(db.replaceAll).mockClear()
+    vi.mocked(db.replaceAll).mockResolvedValue(undefined)
     actionArg.action.onClick()
     await vi.waitFor(() =>
       expect(toast.dismiss).toHaveBeenCalledWith("persistence-failure")
     )
 
-    const retriedStores = vi
-      .mocked(db.writeStore)
-      .mock.calls.map((call) => call[0])
-      .sort()
-    expect(retriedStores).toEqual(["brands", "figures", "queueItems", "spools"])
+    expect(db.replaceAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spools: expect.any(Object),
+        brands: expect.any(Object),
+        figures: expect.any(Object),
+        orders: expect.any(Object),
+        queueItems: expect.any(Object),
+      })
+    )
   })
 
   it("retry failure shows the error toast again", async () => {
-    vi.mocked(db.writeStore)
-      .mockRejectedValueOnce(new Error("IDB failure")) // initial write
-      .mockRejectedValueOnce(new Error("IDB failure")) // retry: spools
-      .mockRejectedValueOnce(new Error("IDB failure")) // retry: brands
-      .mockRejectedValueOnce(new Error("IDB failure")) // retry: figures
-      .mockRejectedValueOnce(new Error("IDB failure")) // retry: queueItems
+    vi.mocked(db.writeStores).mockRejectedValueOnce(new Error("IDB failure"))
+    vi.mocked(db.replaceAll).mockRejectedValueOnce(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled())
 
@@ -1554,7 +1964,7 @@ describe("persistence failure notification", () => {
   })
 
   it("successful writes produce no toast", async () => {
-    vi.mocked(db.writeStore).mockResolvedValue(undefined)
+    vi.mocked(db.writeStores).mockResolvedValue(undefined)
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await new Promise((r) => setTimeout(r, 0))
     expect(toast.error).not.toHaveBeenCalled()
@@ -1562,10 +1972,10 @@ describe("persistence failure notification", () => {
 
   it("_persist = false skips writes entirely", async () => {
     setPersist(false)
-    vi.mocked(db.writeStore).mockRejectedValue(new Error("IDB failure"))
+    vi.mocked(db.writeStores).mockRejectedValue(new Error("IDB failure"))
     store.getState().createSpool({ name: "Red", hex: "#FF0000" })
     await new Promise((r) => setTimeout(r, 0))
-    expect(db.writeStore).not.toHaveBeenCalled()
+    expect(db.writeStores).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
   })
 })

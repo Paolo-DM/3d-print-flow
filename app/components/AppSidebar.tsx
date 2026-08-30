@@ -104,7 +104,9 @@ export function AppSidebar() {
                   asChild
                   isActive={
                     item.path === "/"
-                      ? pathname === "/" || pathname === "/figures"
+                      ? pathname === "/" ||
+                        pathname === "/orders" ||
+                        pathname === "/figures"
                       : pathname === item.path
                   }
                   tooltip={item.title}

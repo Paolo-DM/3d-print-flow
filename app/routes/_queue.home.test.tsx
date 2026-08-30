@@ -12,7 +12,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
 import { store } from "~/lib/store"
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createFigure,
+  createOrder,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import QueueLayout from "~/routes/_queue"
 import ColorView from "~/routes/_queue.home"
 
@@ -39,11 +44,12 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
 })
 
-function renderColorView() {
+function renderColorView(path = "/") {
   const Stub = createRoutesStub([
     {
       path: "/",
@@ -56,7 +62,7 @@ function renderColorView() {
       ],
     },
   ])
-  return render(<Stub initialEntries={["/"]} />)
+  return render(<Stub initialEntries={[path]} />)
 }
 
 describe("ColorView route", () => {
@@ -121,6 +127,69 @@ describe("ColorView route", () => {
     renderColorView()
     expect(await screen.findByText("Red PLA")).toBeTruthy()
     expect(screen.getByTestId("color-ranking-entry")).toBeTruthy()
+  })
+
+  it("an order scope contributes only that order's outstanding colors", async () => {
+    const red = createSpool({ id: "s-red", name: "Red PLA" })
+    const blue = createSpool({ id: "s-blue", name: "Blue PLA" })
+    const redFigure = createFigure({ id: "f-red", requiredColors: [red.id] })
+    const blueFigure = createFigure({
+      id: "f-blue",
+      requiredColors: [blue.id],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const orderRow = createQueueItem({
+      id: "q-order",
+      figureId: redFigure.id,
+      orderId: order.id,
+    })
+    const stockRow = createQueueItem({
+      id: "q-stock",
+      figureId: blueFigure.id,
+      orderId: null,
+    })
+    store.setState({
+      spools: new Map([
+        [red.id, red],
+        [blue.id, blue],
+      ]),
+      figures: new Map([
+        [redFigure.id, redFigure],
+        [blueFigure.id, blueFigure],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [orderRow.id, orderRow],
+        [stockRow.id, stockRow],
+      ]),
+    })
+
+    renderColorView(`/?scope=order:${order.id}`)
+
+    expect(await screen.findByText("Red PLA")).toBeTruthy()
+    expect(screen.queryByText("Blue PLA")).toBeNull()
+  })
+
+  it("explains an empty selected scope without claiming all global work is complete", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({ id: "f1", requiredColors: [spool.id] })
+    const draft = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const stock = createQueueItem({ figureId: figure.id, orderId: null })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[draft.id, draft]]),
+      queueItems: new Map([[stock.id, stock]]),
+    })
+
+    renderColorView(`/?scope=order:${draft.id}`)
+
+    expect(await screen.findByText("No color work in this scope")).toBeTruthy()
+    expect(screen.queryByText("All colors complete!")).toBeNull()
   })
 
   it("renders multiple ranked entries sorted by count descending", async () => {
@@ -230,7 +299,7 @@ describe("ColorView route", () => {
     ).toBe(false)
   })
 
-  it("shows Order badge on ranking entry when it contains order items", async () => {
+  it("does not color-code a ranking entry by order presence", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({
       id: "f1",
@@ -239,7 +308,7 @@ describe("ColorView route", () => {
     })
     const qi = createQueueItem({
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
     store.setState({
@@ -250,7 +319,7 @@ describe("ColorView route", () => {
 
     renderColorView()
     const entry = await screen.findByTestId("color-ranking-entry")
-    expect(within(entry).getByText("Order")).toBeTruthy()
+    expect(within(entry).queryByText("Order")).toBeNull()
   })
 
   it("does not show Order badge on ranking entry when only stock items", async () => {
@@ -262,7 +331,7 @@ describe("ColorView route", () => {
     })
     const qi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     store.setState({
@@ -290,12 +359,12 @@ describe("ColorView route", () => {
     })
     const stockQi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
     store.setState({

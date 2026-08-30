@@ -7,12 +7,6 @@ import type { Brand, Figure, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardHeader } from "~/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu"
 
 interface FigureCardProps {
   figure: Figure
@@ -59,8 +53,8 @@ export function FigureCard({
   const selectable = figure.requiredColors.length > 0
   const selected = orderMode && orderQuantity > 0
 
-  function handleAddToQueue(type: "stock" | "order") {
-    const result = store.getState().addToQueue(figure.id, type)
+  function handleAddToQueue() {
+    const result = store.getState().addToQueue(figure.id, null)
     if (result.type === "rejected" || result.type === "invalid") return
     // A clamped merge applied nothing (already at 99) — no "Added!" flash.
     if (result.type === "merged" && result.clamped) return
@@ -152,30 +146,19 @@ export function FigureCard({
             )
           ) : (
             <div className="flex gap-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={!selectable}
-                    aria-label={`Add ${figure.name} to queue`}
-                  >
-                    {added ? (
-                      <span className="text-xs font-medium">Added!</span>
-                    ) : (
-                      <ListPlus />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleAddToQueue("stock")}>
-                    Stock
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleAddToQueue("order")}>
-                    Order
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={!selectable}
+                aria-label={`Add ${figure.name} to stock queue`}
+                onClick={handleAddToQueue}
+              >
+                {added ? (
+                  <span className="text-xs font-medium">Added!</span>
+                ) : (
+                  <ListPlus />
+                )}
+              </Button>
               {onEdit ? (
                 <Button
                   variant="ghost"

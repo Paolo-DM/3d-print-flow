@@ -1,26 +1,36 @@
 import { startTransition } from "react"
 
 import { replaceAll } from "~/lib/db"
+import { isCanonicalISOString, isValidLocalDate } from "~/lib/date"
 import {
   brandKey,
   isRecord,
   isValidFigureV1,
   isValidQueueItemLegacy,
+  isValidQueueItemV3,
   migrateLegacyQueueItems,
   migrateV1Figures,
+  migrateV3QueueItems,
+  orderReferenceKey,
   type FigureV1,
   type QueueItemLegacy,
+  type QueueItemV3,
 } from "~/lib/migration"
-import { fromJSON, MAX_QUEUE_QUANTITY, setPersist, toJSON } from "~/lib/store"
-import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
+import {
+  drainPersistence,
+  fromJSON,
+  MAX_QUEUE_QUANTITY,
+  setPersist,
+  toJSON,
+} from "~/lib/store"
+import type { Brand, Figure, Order, QueueItem, Spool } from "~/lib/types"
 
 export interface ExportEnvelope {
-  version: 3
+  version: 4
   exportedAt: string
   data: ReturnType<typeof toJSON>
 }
 
-/** Legacy v1 envelope — accepted as import input only, never exported. */
 export interface ExportEnvelopeV1 {
   version: 1
   exportedAt: string
@@ -31,7 +41,6 @@ export interface ExportEnvelopeV1 {
   }
 }
 
-/** Legacy v2 envelope — accepted as import input only, never exported. */
 export interface ExportEnvelopeV2 {
   version: 2
   exportedAt: string
@@ -43,21 +52,28 @@ export interface ExportEnvelopeV2 {
   }
 }
 
-export function buildExportData(): ExportEnvelope {
-  return {
-    version: 3,
-    exportedAt: new Date().toISOString(),
-    data: toJSON(),
+export interface ExportEnvelopeV3 {
+  version: 3
+  exportedAt: string
+  data: {
+    spools: Record<string, Spool>
+    brands: Record<string, Brand>
+    figures: Record<string, Figure>
+    queueItems: Record<string, QueueItemV3>
   }
+}
+
+export function buildExportData(): ExportEnvelope {
+  return { version: 4, exportedAt: new Date().toISOString(), data: toJSON() }
 }
 
 function triggerDownload(json: string, filename: string) {
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.click()
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
   URL.revokeObjectURL(url)
 }
 
@@ -70,15 +86,15 @@ function formatLocalDate(): string {
 }
 
 export function exportData() {
-  const envelope = buildExportData()
-  const json = JSON.stringify(envelope, null, 2)
-  const filename = `3d-print-flow-export-${formatLocalDate()}.json`
-  triggerDownload(json, filename)
+  triggerDownload(
+    JSON.stringify(buildExportData(), null, 2),
+    `3d-print-flow-export-${formatLocalDate()}.json`
+  )
 }
 
-function isValidSpool(value: unknown): boolean {
-  if (!isRecord(value)) return false
+function isValidSpool(value: unknown): value is Spool {
   return (
+    isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.hex === "string"
@@ -86,54 +102,89 @@ function isValidSpool(value: unknown): boolean {
 }
 
 function isValidBrand(value: unknown): value is Brand {
-  if (!isRecord(value)) return false
-  return typeof value.id === "string" && typeof value.name === "string"
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string"
+  )
 }
 
-/**
- * A v2 brand collection must uphold the invariant the brand lifecycle commands
- * rely on: every name non-blank, every `brandKey` unique. Figures are not
- * checked against it — orphan tolerance still stands.
- */
 function isValidBrandCollection(
   value: unknown
 ): value is Record<string, Brand> {
   if (!isRecord(value)) return false
-  const seenKeys = new Set<string>()
-  for (const brand of Object.values(value)) {
-    if (!isValidBrand(brand)) return false
-    const key = brandKey(brand.name)
-    if (key.length === 0 || seenKeys.has(key)) return false
-    seenKeys.add(key)
+  const seen = new Set<string>()
+  for (const [recordKey, brand] of Object.entries(value)) {
+    if (!isValidBrand(brand) || recordKey !== brand.id) return false
+    const normalizedName = brandKey(brand.name)
+    if (!normalizedName || seen.has(normalizedName)) return false
+    seen.add(normalizedName)
   }
   return true
 }
 
-function isValidFigure(value: unknown): boolean {
-  if (!isRecord(value)) return false
+function isValidFigure(value: unknown): value is Figure {
   return (
+    isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     (typeof value.brandId === "string" || value.brandId === null) &&
     typeof value.size === "number" &&
     typeof value.notes === "string" &&
     Array.isArray(value.requiredColors) &&
-    value.requiredColors.every((c: unknown) => typeof c === "string")
+    value.requiredColors.every((color) => typeof color === "string")
   )
 }
 
-/**
- * v3 queue-item validator: quantity integer 1..99, counts a record of
- * string → integer with 0 <= count <= quantity (quantity lives on the same
- * row, so each row is fully checkable in isolation). Required-color
- * membership is *not* validated — orphan tolerance, figures may drift.
- */
-export function isValidQueueItem(value: unknown): boolean {
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+export { isValidLocalDate } from "~/lib/date"
+
+export function isValidOrder(value: unknown): value is Order {
   if (!isRecord(value)) return false
+  const optionalTrimmed = (field: unknown) =>
+    field === null ||
+    (typeof field === "string" && field.length > 0 && field === field.trim())
+  return (
+    typeof value.id === "string" &&
+    UUID_PATTERN.test(value.id) &&
+    typeof value.reference === "string" &&
+    value.reference.length > 0 &&
+    value.reference === value.reference.trim() &&
+    optionalTrimmed(value.customerName) &&
+    optionalTrimmed(value.platform) &&
+    (value.dueDate === null ||
+      (typeof value.dueDate === "string" && isValidLocalDate(value.dueDate))) &&
+    typeof value.notes === "string" &&
+    typeof value.createdAt === "string" &&
+    isCanonicalISOString(value.createdAt)
+  )
+}
+
+function isValidOrderCollection(
+  value: unknown
+): value is Record<string, Order> {
+  if (!isRecord(value)) return false
+  const references = new Set<string>()
+  for (const [key, order] of Object.entries(value)) {
+    if (!isValidOrder(order) || key !== order.id) return false
+    const referenceKey = orderReferenceKey(order.reference)
+    if (references.has(referenceKey)) return false
+    references.add(referenceKey)
+  }
+  return true
+}
+
+export function isValidQueueItem(value: unknown): value is QueueItem {
   if (
+    !isRecord(value) ||
+    "type" in value ||
     typeof value.id !== "string" ||
     typeof value.figureId !== "string" ||
-    (value.type !== "stock" && value.type !== "order")
+    !(
+      value.orderId === null ||
+      (typeof value.orderId === "string" && UUID_PATTERN.test(value.orderId))
+    )
   ) {
     return false
   }
@@ -142,20 +193,21 @@ export function isValidQueueItem(value: unknown): boolean {
     typeof quantity !== "number" ||
     !Number.isInteger(quantity) ||
     quantity < 1 ||
-    quantity > MAX_QUEUE_QUANTITY
+    quantity > MAX_QUEUE_QUANTITY ||
+    !isRecord(value.completedCounts)
   ) {
     return false
   }
-  if (!isRecord(value.completedCounts)) return false
-  for (const count of Object.values(value.completedCounts)) {
-    if (
-      typeof count !== "number" ||
-      !Number.isInteger(count) ||
-      count < 0 ||
-      count > quantity
-    ) {
-      return false
-    }
+  if (
+    !Object.values(value.completedCounts).every(
+      (count) =>
+        typeof count === "number" &&
+        Number.isInteger(count) &&
+        count >= 0 &&
+        count <= quantity
+    )
+  ) {
+    return false
   }
   return (
     !("completedAt" in value) ||
@@ -164,12 +216,20 @@ export function isValidQueueItem(value: unknown): boolean {
   )
 }
 
-function allValuesMatch(
+function allEntriesMatch(
   record: unknown,
-  validator: (v: unknown) => boolean
+  validator: (value: unknown) => boolean
 ): boolean {
-  if (!isRecord(record)) return false
-  return Object.values(record).every(validator)
+  return (
+    isRecord(record) &&
+    Object.entries(record).every(
+      ([key, value]) =>
+        validator(value) &&
+        isRecord(value) &&
+        typeof value.id === "string" &&
+        key === value.id
+    )
+  )
 }
 
 function validateEnvelopeShell(data: unknown): data is {
@@ -177,105 +237,123 @@ function validateEnvelopeShell(data: unknown): data is {
   exportedAt: string
   data: Record<string, unknown>
 } {
-  if (!isRecord(data)) return false
-  if (typeof data.version !== "number") return false
-  if (typeof data.exportedAt !== "string") return false
-  return isRecord(data.data)
-}
-
-export function validateV1Envelope(data: unknown): data is ExportEnvelopeV1 {
-  if (!validateEnvelopeShell(data)) return false
-  if (data.version !== 1) return false
-
-  const d = data.data
   return (
-    allValuesMatch(d.spools, isValidSpool) &&
-    allValuesMatch(d.figures, isValidFigureV1) &&
-    allValuesMatch(d.queueItems, isValidQueueItemLegacy)
+    isRecord(data) &&
+    typeof data.version === "number" &&
+    typeof data.exportedAt === "string" &&
+    isRecord(data.data)
   )
 }
 
-/** Legacy v2 envelope — import input only (queue items still `completedColors`). */
-export function validateV2Envelope(data: unknown): data is ExportEnvelopeV2 {
-  if (!validateEnvelopeShell(data)) return false
-  if (data.version !== 2) return false
-
-  const d = data.data
+export function validateV1Envelope(data: unknown): data is ExportEnvelopeV1 {
   return (
-    allValuesMatch(d.spools, isValidSpool) &&
-    isValidBrandCollection(d.brands) &&
-    allValuesMatch(d.figures, isValidFigure) &&
-    allValuesMatch(d.queueItems, isValidQueueItemLegacy)
+    validateEnvelopeShell(data) &&
+    data.version === 1 &&
+    allEntriesMatch(data.data.spools, isValidSpool) &&
+    allEntriesMatch(data.data.figures, isValidFigureV1) &&
+    allEntriesMatch(data.data.queueItems, isValidQueueItemLegacy)
+  )
+}
+
+export function validateV2Envelope(data: unknown): data is ExportEnvelopeV2 {
+  return (
+    validateEnvelopeShell(data) &&
+    data.version === 2 &&
+    allEntriesMatch(data.data.spools, isValidSpool) &&
+    isValidBrandCollection(data.data.brands) &&
+    allEntriesMatch(data.data.figures, isValidFigure) &&
+    allEntriesMatch(data.data.queueItems, isValidQueueItemLegacy)
+  )
+}
+
+export function validateV3Envelope(data: unknown): data is ExportEnvelopeV3 {
+  return (
+    validateEnvelopeShell(data) &&
+    data.version === 3 &&
+    allEntriesMatch(data.data.spools, isValidSpool) &&
+    isValidBrandCollection(data.data.brands) &&
+    allEntriesMatch(data.data.figures, isValidFigure) &&
+    allEntriesMatch(data.data.queueItems, isValidQueueItemV3)
   )
 }
 
 export function validateExportEnvelope(data: unknown): data is ExportEnvelope {
-  if (!validateEnvelopeShell(data)) return false
-  if (data.version !== 3) return false
-
-  const d = data.data
-  return (
-    allValuesMatch(d.spools, isValidSpool) &&
-    isValidBrandCollection(d.brands) &&
-    allValuesMatch(d.figures, isValidFigure) &&
-    allValuesMatch(d.queueItems, isValidQueueItem)
+  if (!validateEnvelopeShell(data) || data.version !== 4) return false
+  const envelope = data.data
+  if (
+    !allEntriesMatch(envelope.spools, isValidSpool) ||
+    !isValidBrandCollection(envelope.brands) ||
+    !allEntriesMatch(envelope.figures, isValidFigure) ||
+    !isValidOrderCollection(envelope.orders) ||
+    !allEntriesMatch(envelope.queueItems, isValidQueueItem)
+  ) {
+    return false
+  }
+  const orders = envelope.orders as Record<string, Order>
+  const queueItems = envelope.queueItems as Record<string, QueueItem>
+  return Object.values(queueItems).every(
+    (queueItem) => queueItem.orderId === null || orders[queueItem.orderId]
   )
 }
 
-/** Rebuild with explicit fields so stray properties (e.g. a leftover `franchise` on a v2 figure) are stripped, never persisted. */
 function rebuildBrands(brands: Record<string, Brand>): Record<string, Brand> {
-  const result: Record<string, Brand> = {}
-  for (const [id, brand] of Object.entries(brands)) {
-    result[id] = { id: brand.id, name: brand.name }
-  }
-  return result
+  return Object.fromEntries(
+    Object.entries(brands).map(([key, brand]) => [
+      key,
+      { id: brand.id, name: brand.name },
+    ])
+  )
 }
 
 function rebuildFigures(
   figures: Record<string, Figure>
 ): Record<string, Figure> {
-  const result: Record<string, Figure> = {}
-  for (const [id, figure] of Object.entries(figures)) {
-    result[id] = {
-      id: figure.id,
-      name: figure.name,
-      brandId: figure.brandId,
-      size: figure.size,
-      notes: figure.notes,
-      requiredColors: [...figure.requiredColors],
-    }
-  }
-  return result
+  return Object.fromEntries(
+    Object.entries(figures).map(([key, figure]) => [
+      key,
+      {
+        id: figure.id,
+        name: figure.name,
+        brandId: figure.brandId,
+        size: figure.size,
+        notes: figure.notes,
+        requiredColors: [...figure.requiredColors],
+      },
+    ])
+  )
 }
 
-/**
- * v3 import normalization: rebuild each item with explicit fields (stray
- * properties stripped), drop non-integer count entries, clamp counts to
- * 0..quantity. Stale non-required keys are kept — derivation ignores them.
- */
+function rebuildOrders(orders: Record<string, Order>): Record<string, Order> {
+  return Object.fromEntries(
+    Object.entries(orders).map(([key, order]) => [key, { ...order }])
+  )
+}
+
 export function rebuildQueueItems(
   queueItems: Record<string, QueueItem>
 ): Record<string, QueueItem> {
-  const result: Record<string, QueueItem> = {}
-  for (const [id, queueItem] of Object.entries(queueItems)) {
-    const completedCounts: Record<string, number> = {}
-    for (const [spoolId, count] of Object.entries(queueItem.completedCounts)) {
-      if (!Number.isInteger(count)) continue
-      completedCounts[spoolId] = Math.max(
-        0,
-        Math.min(count, queueItem.quantity)
+  return Object.fromEntries(
+    Object.entries(queueItems).map(([key, queueItem]) => {
+      const completedCounts = Object.fromEntries(
+        Object.entries(queueItem.completedCounts).flatMap(([spoolId, count]) =>
+          Number.isInteger(count)
+            ? [[spoolId, Math.max(0, Math.min(count, queueItem.quantity))]]
+            : []
+        )
       )
-    }
-    result[id] = {
-      id: queueItem.id,
-      figureId: queueItem.figureId,
-      type: queueItem.type,
-      quantity: queueItem.quantity,
-      completedCounts,
-      completedAt: queueItem.completedAt ?? null,
-    }
-  }
-  return result
+      return [
+        key,
+        {
+          id: queueItem.id,
+          figureId: queueItem.figureId,
+          orderId: queueItem.orderId,
+          quantity: queueItem.quantity,
+          completedCounts,
+          completedAt: queueItem.completedAt ?? null,
+        },
+      ]
+    })
+  )
 }
 
 export function readJsonFile(file: File): Promise<unknown> {
@@ -295,28 +373,50 @@ export function readJsonFile(file: File): Promise<unknown> {
 
 export async function importData(file: File): Promise<void> {
   const parsed = await readJsonFile(file)
-
   let next: ReturnType<typeof toJSON>
+
   if (validateV1Envelope(parsed)) {
-    const { brands, figures } = migrateV1Figures(parsed.data.figures)
+    const migratedFigures = migrateV1Figures(parsed.data.figures)
+    const migratedQueue = migrateV3QueueItems(
+      migrateLegacyQueueItems(parsed.data.queueItems),
+      migratedFigures.figures
+    )
     next = {
       spools: parsed.data.spools,
-      brands,
-      figures,
-      queueItems: migrateLegacyQueueItems(parsed.data.queueItems),
+      brands: migratedFigures.brands,
+      figures: migratedFigures.figures,
+      orders: migratedQueue.orders,
+      queueItems: migratedQueue.queueItems,
     }
   } else if (validateV2Envelope(parsed)) {
+    const figures = rebuildFigures(parsed.data.figures)
+    const migratedQueue = migrateV3QueueItems(
+      migrateLegacyQueueItems(parsed.data.queueItems),
+      figures
+    )
     next = {
       spools: parsed.data.spools,
       brands: rebuildBrands(parsed.data.brands),
-      figures: rebuildFigures(parsed.data.figures),
-      queueItems: migrateLegacyQueueItems(parsed.data.queueItems),
+      figures,
+      orders: migratedQueue.orders,
+      queueItems: migratedQueue.queueItems,
+    }
+  } else if (validateV3Envelope(parsed)) {
+    const figures = rebuildFigures(parsed.data.figures)
+    const migratedQueue = migrateV3QueueItems(parsed.data.queueItems, figures)
+    next = {
+      spools: parsed.data.spools,
+      brands: rebuildBrands(parsed.data.brands),
+      figures,
+      orders: migratedQueue.orders,
+      queueItems: migratedQueue.queueItems,
     }
   } else if (validateExportEnvelope(parsed)) {
     next = {
       spools: parsed.data.spools,
       brands: rebuildBrands(parsed.data.brands),
       figures: rebuildFigures(parsed.data.figures),
+      orders: rebuildOrders(parsed.data.orders),
       queueItems: rebuildQueueItems(parsed.data.queueItems),
     }
   } else {
@@ -325,16 +425,14 @@ export async function importData(file: File): Promise<void> {
     )
   }
 
+  await drainPersistence()
   const previousState = toJSON()
-
   setPersist(false)
   try {
-    startTransition(() => {
-      fromJSON(next)
-    })
+    startTransition(() => fromJSON(next))
     await replaceAll(next)
     setPersist(true)
-  } catch (error) {
+  } catch {
     fromJSON(previousState)
     setPersist(true)
     throw new Error(

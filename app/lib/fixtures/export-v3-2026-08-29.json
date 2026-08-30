@@ -1,0 +1,40 @@
+{
+  "version": 3,
+  "exportedAt": "2026-08-29T18:00:00.000Z",
+  "data": {
+    "spools": {
+      "sp-red": { "id": "sp-red", "name": "Red PLA", "hex": "#DC2626" }
+    },
+    "brands": {
+      "brand-demo": { "id": "brand-demo", "name": "Demo" }
+    },
+    "figures": {
+      "fig-demo": {
+        "id": "fig-demo",
+        "name": "Demo Figure",
+        "brandId": "brand-demo",
+        "size": 60,
+        "notes": "",
+        "requiredColors": ["sp-red"]
+      }
+    },
+    "queueItems": {
+      "queue-order": {
+        "id": "queue-order",
+        "figureId": "fig-demo",
+        "type": "order",
+        "quantity": 2,
+        "completedCounts": { "sp-red": 1 },
+        "completedAt": null
+      },
+      "queue-stock": {
+        "id": "queue-stock",
+        "figureId": "fig-demo",
+        "type": "stock",
+        "quantity": 1,
+        "completedCounts": {},
+        "completedAt": null
+      }
+    }
+  }
+}

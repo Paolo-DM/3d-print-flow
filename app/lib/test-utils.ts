@@ -1,4 +1,4 @@
-import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
+import type { Brand, Figure, Order, QueueItem, Spool } from "~/lib/types"
 
 export function createSpool(overrides: Partial<Spool> = {}): Spool {
   return {
@@ -29,11 +29,24 @@ export function createFigure(overrides: Partial<Figure> = {}): Figure {
   }
 }
 
+export function createOrder(overrides: Partial<Order> = {}): Order {
+  return {
+    id: crypto.randomUUID(),
+    reference: "ORD-001",
+    customerName: null,
+    platform: null,
+    dueDate: null,
+    notes: "",
+    createdAt: "2026-08-30T10:00:00.000Z",
+    ...overrides,
+  }
+}
+
 export function createQueueItem(overrides: Partial<QueueItem> = {}): QueueItem {
   return {
     id: crypto.randomUUID(),
     figureId: crypto.randomUUID(),
-    type: "stock",
+    orderId: null,
     quantity: 1,
     completedCounts: {},
     completedAt: null,

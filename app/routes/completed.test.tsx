@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import { createRoutesStub } from "react-router"
 import {
   afterEach,
@@ -16,6 +22,7 @@ import { store } from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -44,6 +51,7 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
 })
@@ -395,7 +403,7 @@ describe("Completed route", () => {
     const completed = createQueueItem({
       id: "q1",
       figureId: "f1",
-      type: "order",
+      orderId: null,
       quantity: 2,
       completedCounts: { "s-white": 2 },
       completedAt: "2026-03-30T10:00:00.000Z",
@@ -403,7 +411,7 @@ describe("Completed route", () => {
     const active = createQueueItem({
       id: "q0",
       figureId: "f1",
-      type: "order",
+      orderId: null,
       quantity: 1,
       completedCounts: {},
     })
@@ -424,5 +432,64 @@ describe("Completed route", () => {
     expect(successSpy).toHaveBeenCalledWith("Merged into queue: Kratos now ×3")
     expect(store.getState().queueItems.get("q0")?.quantity).toBe(3)
     successSpy.mockRestore()
+  })
+
+  it("aggregates a Ready order and duplicates it with zero progress", () => {
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+      platform: "Etsy",
+    })
+    const figure = createFigure({
+      id: "f1",
+      name: "Kratos",
+      requiredColors: ["s-white"],
+    })
+    const completed = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+      quantity: 2,
+      completedCounts: { "s-white": 2 },
+      completedAt: "2026-08-30T10:00:00.000Z",
+    })
+    store.setState({
+      spools,
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([[completed.id, completed]]),
+    })
+
+    renderCompleted()
+
+    const readyOrder = screen.getByTestId("ready-order")
+    expect(within(readyOrder).getAllByText("WEB-42").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Print Again")).toBeNull()
+    expect(
+      (
+        within(readyOrder).getByRole("button", {
+          name: "White PLA: 2 of 2 copies printed",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true)
+    expect(
+      within(readyOrder).queryByLabelText("Decrease quantity of Kratos")
+    ).toBeNull()
+    expect(within(readyOrder).queryByLabelText("Remove Kratos")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }))
+
+    expect(store.getState().orders.size).toBe(2)
+    const duplicate = [...store.getState().orders.values()].find(
+      (candidate) => candidate.id !== order.id
+    )!
+    expect(duplicate.reference).toBe("ORD-001")
+    const duplicateRows = [...store.getState().queueItems.values()].filter(
+      (row) => row.orderId === duplicate.id
+    )
+    expect(duplicateRows).toHaveLength(1)
+    expect(duplicateRows[0]).toMatchObject({
+      completedCounts: {},
+      completedAt: null,
+    })
   })
 })

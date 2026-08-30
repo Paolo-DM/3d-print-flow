@@ -7,6 +7,7 @@ import { store } from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -17,6 +18,7 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
 })
@@ -54,10 +56,9 @@ describe("QueueItemCard", () => {
     })
     const qi = createQueueItem({
       id: "q1",
-      figureId: "f1",
+      figureId: figure.id,
       completedCounts: {},
     })
-
     render(
       <QueueItemCard
         queueItem={qi}
@@ -76,9 +77,11 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
+    const order = createOrder({ id: qi.orderId!, reference: "ORD-001" })
+    store.setState({ orders: new Map([[order.id, order]]) })
 
     render(
       <QueueItemCard
@@ -89,7 +92,7 @@ describe("QueueItemCard", () => {
       />
     )
 
-    expect(screen.getByText("Order")).toBeTruthy()
+    expect(screen.getByText("ORD-001")).toBeTruthy()
   })
 
   it("renders Stock badge for stock-type items", () => {
@@ -97,7 +100,7 @@ describe("QueueItemCard", () => {
     const qi = createQueueItem({
       id: "q1",
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
 
@@ -218,12 +221,12 @@ describe("QueueItemCard", () => {
 
   it("shows a warning when figure colors reference missing spools", () => {
     const figure = createFigure({
-      id: "f1",
+      id: "f/with space",
       requiredColors: ["s-white", "s-missing"],
     })
     const qi = createQueueItem({
       id: "q1",
-      figureId: "f1",
+      figureId: figure.id,
       completedCounts: {},
     })
 
@@ -236,11 +239,15 @@ describe("QueueItemCard", () => {
       />
     )
 
-    expect(
-      screen.getByText("Missing 1 spool reference for this figure.")
-    ).toBeTruthy()
+    expect(screen.getByText("Needs attention")).toBeTruthy()
+    expect(screen.getByText("Naruto is missing 1 required spool")).toBeTruthy()
     expect(screen.getAllByRole("switch")).toHaveLength(1)
     expect(screen.getByText("0/2")).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Edit figure" }).getAttribute("href")
+    ).toBe("/catalog?edit=f%2Fwith%20space")
+    fireEvent.click(screen.getByRole("button", { name: "Remove line" }))
+    expect(screen.getByRole("alertdialog")).toBeTruthy()
   })
 
   it("applies animate-completion-pulse class when completionPhase is pulsing", () => {

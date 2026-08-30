@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
 import { BookOpen, CheckCircle, Disc3, ListPlus } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
-import { computeCompletionStatus } from "~/lib/derived"
+import {
+  computeCompletionStatus,
+  parseQueueScope,
+  queueItemMatchesScope,
+  queueScopeKey,
+} from "~/lib/derived"
 import { prefersReducedMotion } from "~/lib/motion"
 import { Button } from "~/components/ui/button"
 import {
@@ -18,6 +23,22 @@ import { QueueItemCard } from "~/components/QueueItemCard"
 import type { CompletionPhase } from "~/components/QueueItemCard"
 
 export default function FigureView() {
+  const orders = usePrintFlowStore((state) => state.orders)
+  const [searchParams] = useSearchParams()
+  const parsedScope = parseQueueScope(searchParams.get("scope"))
+  const scope =
+    parsedScope.kind === "order" && !orders.has(parsedScope.orderId)
+      ? ({ kind: "all" } as const)
+      : parsedScope
+
+  return <ScopedFigureView key={queueScopeKey(scope)} scope={scope} />
+}
+
+function ScopedFigureView({
+  scope,
+}: {
+  scope: ReturnType<typeof parseQueueScope>
+}) {
   const [, setTick] = useState(0)
   const prevCompletionRef = useRef(new Map<string, boolean>())
   const completingRef = useRef(new Map<string, CompletionPhase>())
@@ -25,9 +46,15 @@ export default function FigureView() {
   const spools = usePrintFlowStore((s) => s.spools)
   const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
-  const queueItems = usePrintFlowStore((s) => s.queueItems)
+  const allQueueItems = usePrintFlowStore((s) => s.queueItems)
   const navigate = useNavigate()
   const reducedMotion = prefersReducedMotion()
+
+  const queueItems = new Map(
+    Array.from(allQueueItems).filter(([, row]) =>
+      queueItemMatchesScope(row, scope)
+    )
+  )
 
   // Build current completion map (pure derivation during render)
   const completionMap = new Map<string, boolean>()
@@ -106,7 +133,7 @@ export default function FigureView() {
     )
   }
 
-  if (queueItems.size === 0) {
+  if (allQueueItems.size === 0) {
     return (
       <Empty>
         <EmptyHeader>
@@ -125,19 +152,35 @@ export default function FigureView() {
     )
   }
 
+  if (queueItems.size === 0) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <CheckCircle />
+          </EmptyMedia>
+          <EmptyTitle>No figures in this scope</EmptyTitle>
+          <EmptyDescription>
+            Choose another queue scope to see its queued figures.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
   // Include incomplete items + items in the completion animation
   const visibleItems = Array.from(queueItems.values())
     .filter((qi) => {
       const figure = figures.get(qi.figureId)
-      if (!figure) return false
+      if (!figure) return true
       return (
         !computeCompletionStatus(qi, figure) || completingRef.current.has(qi.id)
       )
     })
     .toSorted((a, b) => {
-      if (a.type === "order" && b.type !== "order") return -1
-      if (a.type !== "order" && b.type === "order") return 1
-      return 0
+      if (a.orderId !== null && b.orderId === null) return -1
+      if (a.orderId === null && b.orderId !== null) return 1
+      return a.id.localeCompare(b.id)
     })
 
   if (visibleItems.length === 0) {
@@ -161,7 +204,6 @@ export default function FigureView() {
     <div className="grid animate-fade-in-up grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {visibleItems.map((qi) => {
         const figure = figures.get(qi.figureId)
-        if (!figure) return null
         const phase = completingRef.current.get(qi.id)
         return (
           <QueueItemCard

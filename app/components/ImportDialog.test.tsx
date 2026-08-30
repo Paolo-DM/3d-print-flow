@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ImportDialog } from "~/components/ImportDialog"
@@ -21,24 +27,16 @@ const testFile = new File(['{"test": true}'], "export.json", {
 
 describe("ImportDialog", () => {
   it("renders confirmation warning text", () => {
-    render(
-      <ImportDialog open={true} onOpenChange={() => {}} file={testFile} />
-    )
+    render(<ImportDialog open={true} onOpenChange={() => {}} file={testFile} />)
 
     expect(screen.getByText("Replace All Data?")).toBeTruthy()
-    expect(
-      screen.getByText(/This will replace ALL current data/)
-    ).toBeTruthy()
+    expect(screen.getByText(/This will replace ALL current data/)).toBeTruthy()
   })
 
   it("Cancel closes without calling importData", () => {
     const onOpenChange = vi.fn()
     render(
-      <ImportDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        file={testFile}
-      />
+      <ImportDialog open={true} onOpenChange={onOpenChange} file={testFile} />
     )
 
     fireEvent.click(screen.getByText("Cancel"))
@@ -51,11 +49,7 @@ describe("ImportDialog", () => {
     const onOpenChange = vi.fn()
 
     render(
-      <ImportDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        file={testFile}
-      />
+      <ImportDialog open={true} onOpenChange={onOpenChange} file={testFile} />
     )
 
     fireEvent.click(screen.getByText("Replace All Data"))
@@ -67,16 +61,14 @@ describe("ImportDialog", () => {
 
   it("shows error message on import failure and dialog stays open", async () => {
     mockImportData.mockRejectedValue(
-      new Error("Import failed — your data has not been changed. Please try again.")
+      new Error(
+        "Import failed — your data has not been changed. Please try again."
+      )
     )
     const onOpenChange = vi.fn()
 
     render(
-      <ImportDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        file={testFile}
-      />
+      <ImportDialog open={true} onOpenChange={onOpenChange} file={testFile} />
     )
 
     fireEvent.click(screen.getByText("Replace All Data"))
@@ -103,11 +95,7 @@ describe("ImportDialog", () => {
     const onOpenChange = vi.fn()
 
     render(
-      <ImportDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        file={testFile}
-      />
+      <ImportDialog open={true} onOpenChange={onOpenChange} file={testFile} />
     )
 
     fireEvent.click(screen.getByText("Replace All Data"))
@@ -116,7 +104,9 @@ describe("ImportDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
 
     rejectImport(
-      new Error("Import failed — your data has not been changed. Please try again.")
+      new Error(
+        "Import failed — your data has not been changed. Please try again."
+      )
     )
 
     await waitFor(() => {
@@ -135,11 +125,7 @@ describe("ImportDialog", () => {
     const onOpenChange = vi.fn()
 
     render(
-      <ImportDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        file={testFile}
-      />
+      <ImportDialog open={true} onOpenChange={onOpenChange} file={testFile} />
     )
 
     fireEvent.click(screen.getByText("Replace All Data"))
@@ -150,9 +136,7 @@ describe("ImportDialog", () => {
   })
 
   it("shows selected filename in dialog body", () => {
-    render(
-      <ImportDialog open={true} onOpenChange={() => {}} file={testFile} />
-    )
+    render(<ImportDialog open={true} onOpenChange={() => {}} file={testFile} />)
 
     expect(screen.getByText("export.json")).toBeTruthy()
   })

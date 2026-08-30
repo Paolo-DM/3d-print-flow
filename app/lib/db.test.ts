@@ -4,11 +4,18 @@ import { openDB } from "idb"
 import { toast } from "sonner"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { _resetDB, hydrate, replaceAll, writeStore } from "~/lib/db"
+import {
+  _resetDB,
+  hydrate,
+  replaceAll,
+  writeStore,
+  writeStores,
+} from "~/lib/db"
 import v1Fixture from "~/lib/fixtures/export-v1-2026-08-28.json"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -57,6 +64,31 @@ async function seedV2Database(
   } = {}
 ) {
   const db = await openDB("print-flow", 2, {
+    upgrade(db) {
+      db.createObjectStore("spools", { keyPath: "id" })
+      db.createObjectStore("brands", { keyPath: "id" })
+      db.createObjectStore("figures", { keyPath: "id" })
+      db.createObjectStore("queueItems", { keyPath: "id" })
+    },
+  })
+  for (const spool of rows.spools ?? []) await db.put("spools", spool)
+  for (const brand of rows.brands ?? []) await db.put("brands", brand)
+  for (const figure of rows.figures ?? []) await db.put("figures", figure)
+  for (const queueItem of rows.queueItems ?? [])
+    await db.put("queueItems", queueItem)
+  db.close()
+}
+
+/** Seed a schema-v3 database to exercise the exact v3 -> v4 IDB upgrade. */
+async function seedV3Database(
+  rows: {
+    spools?: unknown[]
+    brands?: unknown[]
+    figures?: unknown[]
+    queueItems?: unknown[]
+  } = {}
+) {
+  const db = await openDB("print-flow", 3, {
     upgrade(db) {
       db.createObjectStore("spools", { keyPath: "id" })
       db.createObjectStore("brands", { keyPath: "id" })
@@ -138,6 +170,7 @@ function expectStarterCatalog(data: Awaited<ReturnType<typeof hydrate>>) {
     },
   })
   expect(data.queueItems).toEqual({})
+  expect(data.orders).toEqual({})
 
   for (const figure of Object.values(data.figures)) {
     expect(data.brands[figure.brandId!]).toBeDefined()
@@ -158,7 +191,7 @@ describe("writeStore + hydrate roundtrip", () => {
     expect(data.spools[spool.id]).toEqual(spool)
   })
 
-  it("hydrates all four stores", async () => {
+  it("hydrates all five stores", async () => {
     const spool = createSpool()
     const brand = createBrand()
     const figure = createFigure({ brandId: brand.id })
@@ -176,6 +209,7 @@ describe("writeStore + hydrate roundtrip", () => {
     expect(data.brands[brand.id]).toEqual(brand)
     expect(data.figures[figure.id]).toEqual(figure)
     expect(data.queueItems[queueItem.id]).toEqual(queueItem)
+    expect(data.orders).toEqual({})
   })
 
   it("writeStore replaces previous contents", async () => {
@@ -191,6 +225,93 @@ describe("writeStore + hydrate roundtrip", () => {
     expect(Object.keys(data.spools)).toHaveLength(1)
     expect(data.spools[spool2.id]).toEqual(spool2)
     expect(data.spools[spool1.id]).toBeUndefined()
+  })
+
+  it("writes multiple changed maps in one real transaction", async () => {
+    const spool = createSpool({ id: "s1" })
+    const brand = createBrand({ id: "b1" })
+
+    await writeStores({
+      spools: new Map([[spool.id, spool]]),
+      brands: new Map([[brand.id, brand]]),
+    })
+
+    const data = await hydrate()
+    expect(data.spools).toEqual({ [spool.id]: spool })
+    expect(data.brands).toEqual({ [brand.id]: brand })
+  })
+
+  it("aborts every changed store when a later synchronous write fails", async () => {
+    const originalSpool = createSpool({ id: "old-spool" })
+    const originalBrand = createBrand({ id: "old-brand" })
+    await writeStores({
+      spools: new Map([[originalSpool.id, originalSpool]]),
+      brands: new Map([[originalBrand.id, originalBrand]]),
+    })
+
+    const replacement = createSpool({ id: "new-spool" })
+    const invalidBrand = { name: "Missing keyPath id" }
+    await expect(
+      writeStores({
+        spools: new Map([[replacement.id, replacement]]),
+        brands: new Map([["invalid", invalidBrand as never]]),
+      })
+    ).rejects.toThrow()
+
+    _resetDB()
+    const data = await hydrate()
+    expect(data.spools).toEqual({ [originalSpool.id]: originalSpool })
+    expect(data.brands).toEqual({ [originalBrand.id]: originalBrand })
+  })
+
+  it("repairs dangling v4 order links with a collision-safe persisted order", async () => {
+    const missingOrderId = "00000000-0000-4000-8000-000000000009"
+    const collision = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: `Recovered · ${missingOrderId}`,
+    })
+    const row = createQueueItem({ orderId: missingOrderId })
+    await writeStore("orders", new Map([[collision.id, collision]]))
+    await writeStore("queueItems", new Map([[row.id, row]]))
+
+    const first = await hydrate()
+    expect(first.orders[missingOrderId]).toMatchObject({
+      id: missingOrderId,
+      reference: `Recovered · ${missingOrderId} · 2`,
+      customerName: null,
+      platform: null,
+      dueDate: null,
+    })
+
+    _resetDB()
+    const reopened = await hydrate()
+    expect(reopened.orders[missingOrderId]).toEqual(
+      first.orders[missingOrderId]
+    )
+  })
+
+  it("repairs malformed shared order links to one persisted UUID order", async () => {
+    const firstRow = createQueueItem({ id: "q-invalid-a" })
+    const secondRow = createQueueItem({ id: "q-invalid-b" })
+    const malformed = new Map([
+      [firstRow.id, { ...firstRow, orderId: "not-a-uuid" }],
+      [secondRow.id, { ...secondRow, orderId: "not-a-uuid" }],
+    ])
+    await writeStore("queueItems", malformed as never)
+
+    const data = await hydrate()
+    const repairedA = data.queueItems[firstRow.id].orderId
+    const repairedB = data.queueItems[secondRow.id].orderId
+    expect(repairedA).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    )
+    expect(repairedB).toBe(repairedA)
+    expect(data.orders[repairedA!]).toBeDefined()
+
+    _resetDB()
+    const reopened = await hydrate()
+    expect(reopened.queueItems[firstRow.id].orderId).toBe(repairedA)
+    expect(reopened.orders[repairedA!]).toEqual(data.orders[repairedA!])
   })
 })
 
@@ -208,6 +329,7 @@ describe("replaceAll", () => {
       spools: { [newSpool.id]: newSpool },
       brands: { [newBrand.id]: newBrand },
       figures: { [newFigure.id]: newFigure },
+      orders: {},
       queueItems: { [newQueueItem.id]: newQueueItem },
     })
 
@@ -222,7 +344,13 @@ describe("replaceAll", () => {
   })
 
   it("persists an intentionally empty replacement across reopen", async () => {
-    await replaceAll({ spools: {}, brands: {}, figures: {}, queueItems: {} })
+    await replaceAll({
+      spools: {},
+      brands: {},
+      figures: {},
+      orders: {},
+      queueItems: {},
+    })
     _resetDB()
 
     const data = await hydrate()
@@ -236,11 +364,12 @@ describe("replaceAll", () => {
 describe("schema upgrade", () => {
   it("fresh install atomically hydrates the exact starter catalog", async () => {
     const data = await hydrate()
-    const db = await openDB("print-flow", 3)
+    const db = await openDB("print-flow", 4)
 
     expect([...db.objectStoreNames].sort()).toEqual([
       "brands",
       "figures",
+      "orders",
       "queueItems",
       "spools",
     ])
@@ -255,6 +384,7 @@ describe("schema upgrade", () => {
       spools: {},
       brands: {},
       figures: {},
+      orders: {},
       queueItems: {},
     })
   })
@@ -281,11 +411,12 @@ describe("schema upgrade", () => {
       spools: { [spool.id]: spool },
       brands: { [brand.id]: brand },
       figures: { [figure.id]: figure },
+      orders: {},
       queueItems: {
         [legacyQueueItem.id]: {
           id: legacyQueueItem.id,
           figureId: figure.id,
-          type: "stock",
+          orderId: null,
           quantity: 1,
           completedCounts: {},
           completedAt: null,
@@ -294,7 +425,7 @@ describe("schema upgrade", () => {
     })
   })
 
-  it("migrates v2 queue rows to v3: quantity 1, counts of 1, completedAt verbatim", async () => {
+  it("migrates v2 queue rows to v4 with first-class order identity", async () => {
     await seedV2Database({
       queueItems: [
         {
@@ -320,7 +451,7 @@ describe("schema upgrade", () => {
       q1: {
         id: "q1",
         figureId: "f1",
-        type: "order",
+        orderId: expect.any(String),
         quantity: 1,
         completedCounts: { s1: 1, s2: 1 },
         completedAt: "2026-08-12T13:16:46.541Z",
@@ -328,12 +459,61 @@ describe("schema upgrade", () => {
       q2: {
         id: "q2",
         figureId: "f1",
-        type: "stock",
+        orderId: null,
         quantity: 1,
         completedCounts: {},
         completedAt: null,
       },
     })
+  })
+
+  it("migrates a real schema-v3 database to v4 without merging rows", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Legacy figure",
+      requiredColors: [spool.id],
+    })
+    await seedV3Database({
+      spools: [spool],
+      figures: [figure],
+      queueItems: [
+        {
+          id: "q-order",
+          figureId: figure.id,
+          type: "order",
+          quantity: 3,
+          completedCounts: { [spool.id]: 2 },
+          completedAt: "invalid-legacy-stamp",
+        },
+        {
+          id: "q-stock",
+          figureId: figure.id,
+          type: "stock",
+          quantity: 2,
+          completedCounts: {},
+          completedAt: null,
+        },
+      ],
+    })
+
+    const data = await hydrate()
+    expect(Object.keys(data.queueItems).sort()).toEqual(["q-order", "q-stock"])
+    expect(data.queueItems["q-order"]).toMatchObject({
+      orderId: expect.any(String),
+      quantity: 3,
+      completedCounts: { s1: 2 },
+      completedAt: "invalid-legacy-stamp",
+    })
+    expect(data.queueItems["q-stock"].orderId).toBeNull()
+    const migratedOrder = data.orders[data.queueItems["q-order"].orderId!]
+    expect(migratedOrder).toMatchObject({
+      reference: "Imported · Legacy figure · q-order",
+      createdAt: "1970-01-01T00:00:00.000Z",
+    })
+
+    _resetDB()
+    expect(await hydrate()).toEqual(data)
   })
 
   it("deletes v2 queue rows that fail the legacy guard during the upgrade", async () => {
@@ -475,7 +655,7 @@ describe("schema upgrade", () => {
       q1: {
         id: "q1",
         figureId: "a",
-        type: "stock",
+        orderId: null,
         quantity: 1,
         completedCounts: { s1: 1 },
         completedAt: "2026-04-01T08:26:13.501Z",
@@ -499,20 +679,20 @@ describe("schema upgrade", () => {
 
 describe("connection lifecycle", () => {
   it("closes its cached connection when a newer version opens elsewhere (blocking handler)", async () => {
-    await hydrate() // caches an open version-3 connection
+    await hydrate() // caches an open version-4 connection
 
     // Without our blocking handler closing the cached connection, this
-    // version-4 open would stall until the test times out.
-    const newer = await openDB("print-flow", 4, { upgrade() {} })
+    // version-5 open would stall until the test times out.
+    const newer = await openDB("print-flow", 5, { upgrade() {} })
 
-    expect(newer.version).toBe(4)
+    expect(newer.version).toBe(5)
     newer.close()
   })
 
   it("does not cache a failed open: a later attempt reopens fresh", async () => {
-    // A database already at version 4 makes our version-3 open reject
+    // A database already at version 5 makes our version-4 open reject
     // with VersionError.
-    const newer = await openDB("print-flow", 4, { upgrade() {} })
+    const newer = await openDB("print-flow", 5, { upgrade() {} })
     newer.close()
 
     await expect(hydrate()).rejects.toThrow()

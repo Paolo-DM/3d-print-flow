@@ -122,9 +122,14 @@ export default function SpoolLibrary() {
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="animate-fade-in-up grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+        <div className="grid animate-fade-in-up grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
           {spoolList.map((spool) => (
-            <SpoolCard key={spool.id} spool={spool} onEdit={handleEditSpool} onDelete={handleDeleteSpool} />
+            <SpoolCard
+              key={spool.id}
+              spool={spool}
+              onEdit={handleEditSpool}
+              onDelete={handleDeleteSpool}
+            />
           ))}
         </div>
       )}

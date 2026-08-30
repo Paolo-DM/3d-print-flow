@@ -3,7 +3,15 @@ import "fake-indexeddb/auto"
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { Suspense } from "react"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 import { store } from "~/lib/store"
 import { createSpool } from "~/lib/test-utils"
@@ -35,11 +43,13 @@ beforeEach(() => {
   })
 })
 
-function renderForm(props: {
-  spool?: ReturnType<typeof createSpool>
-  onSave?: () => void
-  onCancel?: () => void
-} = {}) {
+function renderForm(
+  props: {
+    spool?: ReturnType<typeof createSpool>
+    onSave?: () => void
+    onCancel?: () => void
+  } = {}
+) {
   const onSave = props.onSave ?? vi.fn()
   const onCancel = props.onCancel ?? vi.fn()
   return {
@@ -47,11 +57,7 @@ function renderForm(props: {
     onCancel,
     ...render(
       <Suspense fallback={<div>Loading...</div>}>
-        <SpoolForm
-          spool={props.spool}
-          onSave={onSave}
-          onCancel={onCancel}
-        />
+        <SpoolForm spool={props.spool} onSave={onSave} onCancel={onCancel} />
       </Suspense>
     ),
   }
@@ -82,7 +88,9 @@ describe("SpoolForm", () => {
   it("save button is disabled when name is empty", () => {
     renderForm()
 
-    const saveButton = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement
+    const saveButton = screen.getByRole("button", {
+      name: "Save",
+    }) as HTMLButtonElement
     expect(saveButton.disabled).toBe(true)
   })
 
@@ -143,7 +151,9 @@ describe("SpoolForm", () => {
     const nameInput = screen.getByTestId("spool-name-input")
     fireEvent.change(nameInput, { target: { value: "   " } })
 
-    const saveButton = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement
+    const saveButton = screen.getByRole("button", {
+      name: "Save",
+    }) as HTMLButtonElement
     expect(saveButton.disabled).toBe(true)
   })
 })

@@ -31,6 +31,7 @@ beforeEach(() => {
   store.setState({
     spools: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
 })
@@ -44,6 +45,10 @@ function renderQueue(initialPath = "/") {
         {
           index: true,
           Component: () => <div>color view content</div>,
+        },
+        {
+          path: "orders",
+          Component: () => <div>orders view content</div>,
         },
         {
           path: "figures",
@@ -62,12 +67,12 @@ describe("QueueLayout", () => {
     expect(await screen.findByText("color view content")).toBeTruthy()
   })
 
-  it("renders stat cards with correct values", async () => {
+  it("renders the compact queue summary with derived values", async () => {
     const spool = createSpool({ id: "s1", hex: "#FF0000" })
     const figure = createFigure({ id: "f1", requiredColors: ["s1"] })
     const qi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
 
@@ -79,71 +84,35 @@ describe("QueueLayout", () => {
 
     renderQueue()
 
-    expect(await screen.findByText("In Queue")).toBeTruthy()
-    expect(screen.getByText("Colors Left")).toBeTruthy()
-    expect(screen.getByText("Orders")).toBeTruthy()
-    expect(screen.getByText("Done Today")).toBeTruthy()
+    const work = (await screen.findByText("Work")).parentElement!
+    expect(within(work).getByText("1")).toBeTruthy()
+    expect(screen.getByText("Colors")).toBeTruthy()
+    expect(screen.getByText("Active")).toBeTruthy()
+    expect(screen.getByText("Ready")).toBeTruthy()
+    expect(screen.getByText("Needs attention")).toBeTruthy()
   })
 
-  it("renders tabs with Color View and Figure View", async () => {
+  it("renders Colors, Orders, and Figures tabs", async () => {
     renderQueue()
 
-    expect(await screen.findByText("Color View")).toBeTruthy()
-    expect(screen.getByText("Figure View")).toBeTruthy()
+    expect(await screen.findByText("Work by color")).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "Orders" })).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "Figures" })).toBeTruthy()
   })
 
-  it("shows Color View tab as active on root path", async () => {
+  it("shows Work by color as active on root path", async () => {
     renderQueue("/")
 
-    const colorTab = await screen.findByText("Color View")
+    const colorTab = await screen.findByText("Work by color")
     expect(
       colorTab.closest("[data-slot='tabs-trigger']")?.getAttribute("data-state")
     ).toBe("active")
   })
 
-  it("counts only today's completed queue items in the stat card", async () => {
-    const spool = createSpool({ id: "s1", hex: "#FF0000" })
-    const figure = createFigure({ id: "f1", requiredColors: ["s1"] })
-    const today = new Date()
-    const completedTodayAt = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      12
-    ).toISOString()
-    const completedYesterdayAt = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - 1,
-      12
-    ).toISOString()
-    const completedToday = createQueueItem({
-      id: "q1",
-      figureId: figure.id,
-      completedCounts: { s1: 1 },
-      completedAt: completedTodayAt,
-    })
-    const completedYesterday = createQueueItem({
-      id: "q2",
-      figureId: figure.id,
-      completedCounts: { s1: 1 },
-      completedAt: completedYesterdayAt,
-    })
+  it("falls back to All when a scoped order is missing", async () => {
+    renderQueue("/?scope=order:missing")
 
-    store.setState({
-      spools: new Map([["s1", spool]]),
-      figures: new Map([["f1", figure]]),
-      queueItems: new Map([
-        [completedToday.id, completedToday],
-        [completedYesterday.id, completedYesterday],
-      ]),
-    })
-
-    renderQueue()
-
-    const label = await screen.findByText("Done Today")
-    const card = label.closest("[data-slot='card']") as HTMLElement
-    expect(card).toBeTruthy()
-    expect(within(card).getByText("1")).toBeTruthy()
+    const scope = await screen.findByLabelText("Queue scope")
+    expect((scope as HTMLSelectElement).value).toBe("all")
   })
 })

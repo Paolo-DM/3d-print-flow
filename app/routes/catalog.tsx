@@ -1,15 +1,18 @@
 import { useState } from "react"
+import { useSearchParams } from "react-router"
 import { Check, Shapes } from "lucide-react"
 import { toast } from "sonner"
 
 import { MAX_QUEUE_QUANTITY, usePrintFlowStore } from "~/lib/store"
-import { computeAffectedQueueItems } from "~/lib/derived"
-import type { Brand, Figure, Spool } from "~/lib/types"
+import { computeAffectedQueueItems, deriveOrderState } from "~/lib/derived"
+import type { Brand, Figure, Order, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { useIsMobile } from "~/hooks/use-mobile"
 import { BrandManager } from "~/components/BrandManager"
 import { FigureCard } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
+import { OrderForm } from "~/components/OrderForm"
+import { OrderIdentity } from "~/components/OrderIdentity"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +27,7 @@ import { Button } from "~/components/ui/button"
 import {
   Drawer,
   DrawerContent,
+  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
 } from "~/components/ui/drawer"
@@ -38,6 +42,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "~/components/ui/sheet"
@@ -52,6 +57,7 @@ const NO_BRAND = "no-brand"
 type CatalogModal =
   | { kind: "figure"; figure: Figure | null }
   | { kind: "brands" }
+  | { kind: "order" }
 
 interface BrandGroup {
   id: string
@@ -221,30 +227,51 @@ function BrandGroupedCatalog({
 }
 
 export default function FigureCatalog() {
+  const [searchParams] = useSearchParams()
+  const routeStateKey = `${searchParams.get("order") ?? ""}:${searchParams.get("edit") ?? ""}`
+
+  return <FigureCatalogContent key={routeStateKey} />
+}
+
+function FigureCatalogContent() {
   const figures = usePrintFlowStore((s) => s.figures)
   const brands = usePrintFlowStore((s) => s.brands)
   const spools = usePrintFlowStore((s) => s.spools)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
+  const orders = usePrintFlowStore((s) => s.orders)
   const deleteFigure = usePrintFlowStore((s) => s.deleteFigure)
   const addBatchToQueue = usePrintFlowStore((s) => s.addBatchToQueue)
   const dataGeneration = usePrintFlowStore((s) => s.dataGeneration)
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  // Order mode (CAP-5): per-figure quantities staged locally, committed as one
-  // batch. Stock/order is chosen once for the whole batch, defaulting to order.
-  const [orderMode, setOrderMode] = useState(false)
+  // A composer always targets one first-class order. A link from Orders can
+  // open this route with `?order=<id>` to add lines to an existing draft/work.
+  const [targetOrderId, setTargetOrderId] = useState<string | null>(() => {
+    const requested = searchParams.get("order")
+    return requested &&
+      orders.has(requested) &&
+      deriveOrderState(requested, queueItems, figures, spools) !== "ready"
+      ? requested
+      : null
+  })
   const [orderSelection, setOrderSelection] = useState<
     ReadonlyMap<string, number>
   >(new Map())
-  const [batchType, setBatchType] = useState<"stock" | "order">("order")
+  const targetOrder = targetOrderId ? orders.get(targetOrderId) : undefined
+  const orderMode = targetOrder !== undefined
+  const requestedEdit = searchParams.get("edit")
+  const initialEditFigure = requestedEdit
+    ? (figures.get(requestedEdit) ?? null)
+    : null
 
   // Closing leaves `modal` intact so the exit animation keeps its content.
-  const [open, setOpen] = useState(false)
-  const [modal, setModal] = useState<CatalogModal>({
+  const [open, setOpen] = useState(initialEditFigure !== null)
+  const [modal, setModal] = useState<CatalogModal>(() => ({
     kind: "figure",
-    figure: null,
-  })
+    figure: initialEditFigure,
+  }))
   // Bumped on every open so reopening before the exit animation finishes
   // remounts the content instead of reusing a stale draft.
   const [openSeq, setOpenSeq] = useState(0)
@@ -257,9 +284,19 @@ export default function FigureCatalog() {
   const title =
     modal.kind === "brands"
       ? "Manage brands"
-      : modal.figure
-        ? "Edit Figure"
-        : "Add Figure"
+      : modal.kind === "order"
+        ? "Create order"
+        : modal.figure
+          ? "Edit Figure"
+          : "Add Figure"
+  const modalDescription =
+    modal.kind === "brands"
+      ? "Create, rename, or remove the brands used to group figures."
+      : modal.kind === "order"
+        ? "Enter the order details before selecting figures from the catalog."
+        : modal.figure
+          ? "Update this figure and its required filament colors."
+          : "Create a figure and assign its required filament colors."
 
   const emptyDescription =
     spools.size > 0
@@ -284,13 +321,22 @@ export default function FigureCatalog() {
     openModal({ kind: "brands" })
   }
 
+  function handleCreateOrder() {
+    openModal({ kind: "order" })
+  }
+
   function handleDeleteFigure(figure: Figure) {
-    setOpen(false)
+    handleClose()
     setDeletingFigure(figure)
   }
 
   function handleClose() {
     setOpen(false)
+    if (searchParams.has("edit")) {
+      const next = new URLSearchParams(searchParams)
+      next.delete("edit")
+      setSearchParams(next, { replace: true })
+    }
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -319,17 +365,20 @@ export default function FigureCatalog() {
   )
 
   function exitOrderMode() {
-    // Cancel/exit clears selection and resets the batch type default.
-    setOrderMode(false)
+    // Cancel/exit clears selection; the order remains visible as a Draft when
+    // it has no linked rows.
+    setTargetOrderId(null)
     setOrderSelection(new Map())
-    setBatchType("order")
+    const next = new URLSearchParams(searchParams)
+    next.delete("order")
+    setSearchParams(next, { replace: true })
   }
 
   function handleToggleOrderMode() {
     if (orderMode) {
       exitOrderMode()
     } else {
-      setOrderMode(true)
+      handleCreateOrder()
     }
   }
 
@@ -352,7 +401,8 @@ export default function FigureCatalog() {
     // Staged figures that no longer exist were filtered from the payload —
     // count them as skipped so the toast stays honest about the order.
     const staleSkippedCount = orderSelection.size - effectiveSelection.size
-    const result = addBatchToQueue(entries, batchType)
+    if (!targetOrder) return
+    const result = addBatchToQueue(entries, targetOrder.id)
     switch (result.type) {
       case "queued": {
         const skippedCount = result.skipped.length + staleSkippedCount
@@ -394,6 +444,19 @@ export default function FigureCatalog() {
   const modalContent =
     modal.kind === "brands" ? (
       <BrandManager key={`${dataGeneration}-${openSeq}`} />
+    ) : modal.kind === "order" ? (
+      <OrderForm
+        key={`order-${openSeq}`}
+        onSaved={(order: Order) => {
+          setTargetOrderId(order.id)
+          setOrderSelection(new Map())
+          const next = new URLSearchParams(searchParams)
+          next.set("order", order.id)
+          setSearchParams(next, { replace: true })
+          setOpen(false)
+        }}
+        onCancel={handleClose}
+      />
     ) : (
       <FigureForm
         key={`${modal.figure?.id ?? "create"}-${openSeq}`}
@@ -407,7 +470,7 @@ export default function FigureCatalog() {
     <div className="p-4 lg:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Figure Catalog</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {figureList.length > 0 ? (
             <Button
               variant={orderMode ? "secondary" : "outline"}
@@ -458,31 +521,14 @@ export default function FigureCatalog() {
           className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-popover/95 p-3 shadow-lg supports-backdrop-filter:bg-popover/90 supports-backdrop-filter:backdrop-blur-xs"
           data-testid="order-summary-bar"
         >
-          <span className="text-sm font-medium tabular-nums">
-            {selectedFigureCount} figure{selectedFigureCount === 1 ? "" : "s"} ·{" "}
-            {selectedPieceCount} piece{selectedPieceCount === 1 ? "" : "s"}
-          </span>
+          <div className="text-sm font-medium tabular-nums">
+            {targetOrder ? <OrderIdentity order={targetOrder} compact /> : null}
+            <span className="mt-1 block">
+              {selectedFigureCount} figure{selectedFigureCount === 1 ? "" : "s"}{" "}
+              · {selectedPieceCount} piece{selectedPieceCount === 1 ? "" : "s"}
+            </span>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div
-              className="flex items-center gap-1"
-              role="group"
-              aria-label="Queue as"
-            >
-              <Button
-                variant={batchType === "stock" ? "secondary" : "ghost"}
-                aria-pressed={batchType === "stock"}
-                onClick={() => setBatchType("stock")}
-              >
-                Stock
-              </Button>
-              <Button
-                variant={batchType === "order" ? "secondary" : "ghost"}
-                aria-pressed={batchType === "order"}
-                onClick={() => setBatchType("order")}
-              >
-                Order
-              </Button>
-            </div>
             <Button variant="outline" onClick={exitOrderMode}>
               Cancel
             </Button>
@@ -501,8 +547,11 @@ export default function FigureCatalog() {
           <DrawerContent>
             <DrawerHeader>
               <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription className="sr-only">
+                {modalDescription}
+              </DrawerDescription>
             </DrawerHeader>
-            {modalContent}
+            <div className="min-h-0 overflow-y-auto">{modalContent}</div>
           </DrawerContent>
         </Drawer>
       ) : (
@@ -510,8 +559,11 @@ export default function FigureCatalog() {
           <SheetContent>
             <SheetHeader>
               <SheetTitle>{title}</SheetTitle>
+              <SheetDescription className="sr-only">
+                {modalDescription}
+              </SheetDescription>
             </SheetHeader>
-            {modalContent}
+            <div className="min-h-0 overflow-y-auto">{modalContent}</div>
           </SheetContent>
         </Sheet>
       )}

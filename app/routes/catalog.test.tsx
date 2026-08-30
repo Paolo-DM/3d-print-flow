@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { createRoutesStub } from "react-router"
+import { createRoutesStub, useLocation } from "react-router"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import {
   afterEach,
@@ -17,6 +17,7 @@ import { fromJSON, store, toJSON } from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -45,16 +46,29 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
     dataGeneration: 0,
   })
 })
 
-function renderCatalog() {
+function renderCatalog(initialEntry = "/catalog") {
+  function CatalogHarness() {
+    const location = useLocation()
+    return (
+      <>
+        <span data-testid="catalog-location" hidden>
+          {location.pathname}
+          {location.search}
+        </span>
+        <FigureCatalog />
+      </>
+    )
+  }
   const Stub = createRoutesStub([
-    { path: "/catalog", Component: FigureCatalog },
+    { path: "/catalog", Component: CatalogHarness },
   ])
-  return render(<Stub initialEntries={["/catalog"]} />)
+  return render(<Stub initialEntries={[initialEntry]} />)
 }
 
 describe("FigureCatalog route", () => {
@@ -213,6 +227,25 @@ describe("FigureCatalog route", () => {
       "figure-name-input"
     ) as HTMLInputElement
     expect(nameInput.value).toBe("Sasuke")
+  })
+
+  it("opens a blocked-work edit deep link and clears it when the panel closes", () => {
+    const figure = createFigure({
+      id: "f/with space",
+      name: "Needs repair",
+      requiredColors: ["missing-spool"],
+    })
+    store.setState({ figures: new Map([[figure.id, figure]]) })
+
+    renderCatalog("/catalog?edit=f%2Fwith%20space")
+
+    expect(
+      (screen.getByTestId("figure-name-input") as HTMLInputElement).value
+    ).toBe("Needs repair")
+    fireEvent.click(screen.getByRole("button", { name: "Close" }))
+
+    expect(screen.getByTestId("catalog-location").textContent).toBe("/catalog")
+    expect(screen.queryByTestId("figure-name-input")).toBeNull()
   })
 
   it("renders singular spool count in empty description when exactly one spool exists", () => {
@@ -826,6 +859,11 @@ describe("brand manager from the catalog", () => {
 })
 
 describe("catalog order mode", () => {
+  function beginNewOrder() {
+    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    fireEvent.click(screen.getByRole("button", { name: "Create order" }))
+  }
+
   function seedCatalog() {
     const spool = createSpool({ id: "s1", name: "Green" })
     const buzz = createFigure({
@@ -858,14 +896,11 @@ describe("catalog order mode", () => {
     renderCatalog()
 
     expect(screen.queryByTestId("order-summary-bar")).toBeNull()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
 
     const bar = screen.getByTestId("order-summary-bar")
     expect(bar.textContent).toContain("0 figures · 0 pieces")
-    const orderChoice = screen.getByRole("button", {
-      name: "Order",
-    }) as HTMLButtonElement
-    expect(orderChoice.getAttribute("aria-pressed")).toBe("true")
+    expect(bar.textContent).toContain("ORD-001")
     const confirm = screen.getByRole("button", {
       name: "Confirm",
     }) as HTMLButtonElement
@@ -875,7 +910,7 @@ describe("catalog order mode", () => {
   it("selecting cards and adjusting quantities updates the summary", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
 
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
     fireEvent.click(screen.getByLabelText("Add Woody to order"))
@@ -895,7 +930,7 @@ describe("catalog order mode", () => {
   it("figures with no required colors stay unselectable", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
 
     const add = screen.getByLabelText("Add Empty to order") as HTMLButtonElement
     expect(add.disabled).toBe(true)
@@ -904,7 +939,7 @@ describe("catalog order mode", () => {
   it("confirm queues the whole batch in one store update and exits order mode", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
 
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
     fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
@@ -923,35 +958,60 @@ describe("catalog order mode", () => {
 
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(2)
-    expect(items.every((qi) => qi.type === "order")).toBe(true)
+    expect(items.every((qi) => qi.orderId !== null)).toBe(true)
     expect(items.find((qi) => qi.figureId === "fig-buzz")?.quantity).toBe(2)
     expect(items.find((qi) => qi.figureId === "fig-woody")?.quantity).toBe(1)
 
     // order mode exited, selection cleared
     expect(screen.queryByTestId("order-summary-bar")).toBeNull()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     expect(screen.getByTestId("order-summary-bar").textContent).toContain(
       "0 figures · 0 pieces"
     )
   })
 
-  it("stock choice queues the batch as stock", () => {
+  it("links a confirmed batch to the created order", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByRole("button", { name: "Stock" }))
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
 
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(1)
-    expect(items[0].type).toBe("stock")
+    expect(items[0].orderId).toBe([...store.getState().orders.keys()][0])
+  })
+
+  it("does not reopen a Ready historical order from a direct catalog link", () => {
+    seedCatalog()
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "ORD-042",
+    })
+    const completed = createQueueItem({
+      id: "completed",
+      figureId: "fig-buzz",
+      orderId: order.id,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-30T10:00:00.000Z",
+    })
+    store.setState({
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([[completed.id, completed]]),
+    })
+
+    renderCatalog(`/catalog?order=${order.id}`)
+
+    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
+    expect(screen.getByTestId("order-mode-toggle").textContent).toContain(
+      "Add order"
+    )
   })
 
   it("cancel exits order mode and clears the selection", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
@@ -959,7 +1019,7 @@ describe("catalog order mode", () => {
     expect(screen.queryByTestId("order-summary-bar")).toBeNull()
     expect(store.getState().queueItems.size).toBe(0)
 
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     expect(screen.getByTestId("order-summary-bar").textContent).toContain(
       "0 figures · 0 pieces"
     )
@@ -967,16 +1027,19 @@ describe("catalog order mode", () => {
 
   it("bulk-add merges into an existing active entry per CAP-6", () => {
     seedCatalog()
+    const order = createOrder({ reference: "ORD-042" })
     const existing = createQueueItem({
       id: "q-existing",
       figureId: "fig-buzz",
-      type: "order",
+      orderId: order.id,
       quantity: 1,
     })
-    store.setState({ queueItems: new Map([["q-existing", existing]]) })
+    store.setState({
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([["q-existing", existing]]),
+    })
 
-    renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    renderCatalog(`/catalog?order=${order.id}`)
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
     fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
@@ -988,7 +1051,7 @@ describe("catalog order mode", () => {
   it("tapping a card selects it at ×1; tapping a selected card leaves its quantity alone", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
 
     const buzzCard = screen
       .getByText("Buzz")
@@ -1012,7 +1075,7 @@ describe("catalog order mode", () => {
   it("the order-mode + button is disabled at 99", () => {
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
 
     const plus = screen.getByLabelText(
@@ -1034,7 +1097,7 @@ describe("catalog order mode", () => {
     const successSpy = vi.spyOn(toast, "success")
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
     fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
     fireEvent.click(screen.getByLabelText("Add Woody to order"))
@@ -1050,7 +1113,7 @@ describe("catalog order mode", () => {
     const successSpy = vi.spyOn(toast, "success")
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
     fireEvent.click(screen.getByLabelText("Add Woody to order"))
 
@@ -1078,7 +1141,7 @@ describe("catalog order mode", () => {
     const warningSpy = vi.spyOn(toast, "warning")
     seedCatalog()
     renderCatalog()
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+    beginNewOrder()
     fireEvent.click(screen.getByLabelText("Add Buzz to order"))
 
     // the figure still exists but loses its colors after staging — the store

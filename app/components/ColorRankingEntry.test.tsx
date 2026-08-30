@@ -7,6 +7,7 @@ import { store } from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -17,6 +18,7 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
 })
@@ -120,12 +122,12 @@ describe("ColorRankingEntry", () => {
     })
     const stockQi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
 
@@ -209,12 +211,12 @@ describe("ColorRankingEntry", () => {
     expect(screen.queryByText("Complete")).toBeNull()
   })
 
-  it("shows order badge when entry has orders", () => {
+  it("does not substitute a generic badge for order identity", () => {
     const entry = makeEntry({ hasOrders: true })
     const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
     const qi = createQueueItem({
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
 
@@ -230,7 +232,39 @@ describe("ColorRankingEntry", () => {
       />
     )
 
-    expect(screen.getByText("Order")).toBeTruthy()
+    expect(screen.queryByText("Order")).toBeNull()
+  })
+
+  it("renders the linked order reference and platform in expanded work", () => {
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "WEB-42",
+      platform: "Etsy",
+    })
+    const entry = makeEntry({ hasOrders: true })
+    const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })
+    const qi = createQueueItem({
+      figureId: figure.id,
+      orderId: order.id,
+    })
+    store.setState({ orders: new Map([[order.id, order]]) })
+
+    render(
+      <ColorRankingEntry
+        entry={entry}
+        rank={1}
+        figures={new Map([[figure.id, figure]])}
+        brands={brands}
+        queueItems={new Map([[qi.id, qi]])}
+        spools={spools}
+        currentSpoolId="s-white"
+      />
+    )
+
+    fireEvent.click(screen.getByTestId("color-ranking-entry"))
+    expect(screen.getByText("WEB-42")).toBeTruthy()
+    expect(screen.getByText("Etsy")).toBeTruthy()
+    expect(screen.queryByText("Order")).toBeNull()
   })
 
   it("renders separator between order and stock items in expanded list", () => {
@@ -247,12 +281,12 @@ describe("ColorRankingEntry", () => {
     })
     const stockQi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     const orderQi = createQueueItem({
       figureId: "f2",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
 
@@ -296,12 +330,12 @@ describe("ColorRankingEntry", () => {
     })
     const qi1 = createQueueItem({
       figureId: "f1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
     const qi2 = createQueueItem({
       figureId: "f2",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
 
@@ -345,12 +379,12 @@ describe("ColorRankingEntry", () => {
     })
     const qi1 = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     const qi2 = createQueueItem({
       figureId: "f2",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
 
@@ -389,7 +423,7 @@ describe("ColorRankingEntry", () => {
     })
     const qi = createQueueItem({
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
 

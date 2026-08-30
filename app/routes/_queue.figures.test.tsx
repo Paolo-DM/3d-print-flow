@@ -8,6 +8,7 @@ import { store } from "~/lib/store"
 import {
   createBrand,
   createFigure,
+  createOrder,
   createQueueItem,
   createSpool,
 } from "~/lib/test-utils"
@@ -40,12 +41,13 @@ beforeEach(() => {
     spools: new Map(),
     brands: new Map(),
     figures: new Map(),
+    orders: new Map(),
     queueItems: new Map(),
   })
   prefersReducedMotion = false
 })
 
-function renderFigureView() {
+function renderFigureView(path = "/figures") {
   const Stub = createRoutesStub([
     {
       path: "/",
@@ -53,7 +55,7 @@ function renderFigureView() {
       children: [{ path: "figures", Component: FigureView }],
     },
   ])
-  return render(<Stub initialEntries={["/figures"]} />)
+  return render(<Stub initialEntries={[path]} />)
 }
 
 describe("FigureView route", () => {
@@ -146,6 +148,70 @@ describe("FigureView route", () => {
     expect(screen.getByText("0/1")).toBeTruthy()
   })
 
+  it("an order scope renders only that order's figures", async () => {
+    const spool = createSpool({ id: "s1" })
+    const orderFigure = createFigure({
+      id: "f-order",
+      name: "Order figure",
+      requiredColors: [spool.id],
+    })
+    const stockFigure = createFigure({
+      id: "f-stock",
+      name: "Stock figure",
+      requiredColors: [spool.id],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const orderRow = createQueueItem({
+      id: "q-order",
+      figureId: orderFigure.id,
+      orderId: order.id,
+    })
+    const stockRow = createQueueItem({
+      id: "q-stock",
+      figureId: stockFigure.id,
+      orderId: null,
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [orderFigure.id, orderFigure],
+        [stockFigure.id, stockFigure],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [orderRow.id, orderRow],
+        [stockRow.id, stockRow],
+      ]),
+    })
+
+    renderFigureView(`/figures?scope=order:${order.id}`)
+
+    expect(await screen.findByText("Order figure")).toBeTruthy()
+    expect(screen.queryByText("Stock figure")).toBeNull()
+  })
+
+  it("explains an empty selected scope without claiming all figures are complete", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({ id: "f1", requiredColors: [spool.id] })
+    const draft = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const stock = createQueueItem({ figureId: figure.id, orderId: null })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[draft.id, draft]]),
+      queueItems: new Map([[stock.id, stock]]),
+    })
+
+    renderFigureView(`/figures?scope=order:${draft.id}`)
+
+    expect(await screen.findByText("No figures in this scope")).toBeTruthy()
+    expect(screen.queryByText("All figures complete!")).toBeNull()
+  })
+
   it("orders appear before stock items", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const stockFigure = createFigure({
@@ -161,13 +227,13 @@ describe("FigureView route", () => {
     const stockQi = createQueueItem({
       id: "q-stock",
       figureId: "f1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
     const orderQi = createQueueItem({
       id: "q-order",
       figureId: "f2",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
     store.setState({

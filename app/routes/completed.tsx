@@ -1,10 +1,22 @@
 import { useState } from "react"
-import { Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react"
+import {
+  Archive,
+  ChevronDown,
+  Copy,
+  PackageCheck,
+  RotateCcw,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 
-import { computeCompletionStatus } from "~/lib/derived"
+import {
+  computeCompletionStatus,
+  deriveOrderState,
+  getOrderRows,
+  sortOrders,
+} from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
-import type { Spool } from "~/lib/types"
+import type { Order, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import {
   AlertDialog,
@@ -20,6 +32,8 @@ import {
 import { Button } from "~/components/ui/button"
 import { ColorChip } from "~/components/ColorChip"
 import { QuantityBadge } from "~/components/QuantityBadge"
+import { OrderIdentity } from "~/components/OrderIdentity"
+import { QueueItemCard } from "~/components/QueueItemCard"
 import {
   Collapsible,
   CollapsibleContent,
@@ -156,16 +170,69 @@ function CompletedArchiveItem({
   )
 }
 
+function ReadyOrder({ order }: { order: Order }) {
+  const brands = usePrintFlowStore((state) => state.brands)
+  const figures = usePrintFlowStore((state) => state.figures)
+  const spools = usePrintFlowStore((state) => state.spools)
+  const queueItems = usePrintFlowStore((state) => state.queueItems)
+  const duplicateOrder = usePrintFlowStore((state) => state.duplicateOrder)
+  const rows = getOrderRows(order.id, queueItems)
+
+  function duplicate() {
+    const result = duplicateOrder(order.id)
+    if (result.type === "not-found") {
+      toast.error("Couldn't duplicate — this order is no longer available.")
+      return
+    }
+    toast.success(
+      `${result.order.reference} created with ${result.lines} zero-progress line${result.lines === 1 ? "" : "s"}.`
+    )
+  }
+
+  return (
+    <article
+      className="rounded-xl border bg-card p-4"
+      data-testid="ready-order"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <OrderIdentity order={order} />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ready · {rows.length} line{rows.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={duplicate}>
+          <Copy /> Duplicate
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {rows.map((row) => (
+          <QueueItemCard
+            key={row.id}
+            queueItem={row}
+            figure={figures.get(row.figureId)}
+            brands={brands}
+            spools={spools}
+            readOnly
+          />
+        ))}
+      </div>
+    </article>
+  )
+}
+
 export default function Completed() {
   const spools = usePrintFlowStore((s) => s.spools)
   const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
+  const orders = usePrintFlowStore((s) => s.orders)
   const queueItems = usePrintFlowStore((s) => s.queueItems)
   const requeueCompleted = usePrintFlowStore((s) => s.requeueCompleted)
   const removeFromQueue = usePrintFlowStore((s) => s.removeFromQueue)
 
   const completedItems = Array.from(queueItems.values())
     .filter((qi) => {
+      if (qi.orderId !== null) return false
       const figure = figures.get(qi.figureId)
       return figure ? computeCompletionStatus(qi, figure) : false
     })
@@ -174,6 +241,16 @@ export default function Completed() {
       if (!a.completedAt || !b.completedAt) return 0
       return b.completedAt.localeCompare(a.completedAt)
     })
+  const readyOrders = sortOrders(
+    orders.values(),
+    queueItems,
+    figures,
+    spools,
+    "9999-12-31"
+  ).filter(
+    (order) =>
+      deriveOrderState(order.id, queueItems, figures, spools) === "ready"
+  )
 
   function handleRequeue(queueItemId: string) {
     const source = queueItems.get(queueItemId)
@@ -208,7 +285,7 @@ export default function Completed() {
     <div className="p-4 lg:p-6">
       <h1 className="mb-4 text-2xl font-bold">Completed</h1>
 
-      {completedItems.length === 0 ? (
+      {completedItems.length === 0 && readyOrders.length === 0 ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -221,29 +298,56 @@ export default function Completed() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="animate-fade-in-up space-y-3">
-          {completedItems.map((qi) => {
-            const figure = figures.get(qi.figureId)
-            if (!figure) return null
-            return (
-              <CompletedArchiveItem
-                key={qi.id}
-                queueItemId={qi.id}
-                figureName={figure.name}
-                brandName={
-                  figure.brandId !== null
-                    ? (brands.get(figure.brandId)?.name ?? null)
-                    : null
-                }
-                requiredColors={figure.requiredColors}
-                quantity={qi.quantity}
-                completedAt={qi.completedAt}
-                spools={spools}
-                onRequeue={handleRequeue}
-                onRemove={removeFromQueue}
-              />
-            )
-          })}
+        <div className="animate-fade-in-up space-y-6">
+          {readyOrders.length > 0 ? (
+            <section aria-labelledby="ready-orders-heading">
+              <h2
+                id="ready-orders-heading"
+                className="mb-3 flex items-center gap-2 text-lg font-semibold"
+              >
+                <PackageCheck className="size-5" /> Ready orders
+              </h2>
+              <div className="space-y-3">
+                {readyOrders.map((order) => (
+                  <ReadyOrder key={order.id} order={order} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {completedItems.length > 0 ? (
+            <section aria-labelledby="completed-stock-heading">
+              <h2
+                id="completed-stock-heading"
+                className="mb-3 text-lg font-semibold"
+              >
+                Completed stock
+              </h2>
+              <div className="space-y-3">
+                {completedItems.map((qi) => {
+                  const figure = figures.get(qi.figureId)
+                  if (!figure) return null
+                  return (
+                    <CompletedArchiveItem
+                      key={qi.id}
+                      queueItemId={qi.id}
+                      figureName={figure.name}
+                      brandName={
+                        figure.brandId !== null
+                          ? (brands.get(figure.brandId)?.name ?? null)
+                          : null
+                      }
+                      requiredColors={figure.requiredColors}
+                      quantity={qi.quantity}
+                      completedAt={qi.completedAt}
+                      spools={spools}
+                      onRequeue={handleRequeue}
+                      onRemove={removeFromQueue}
+                    />
+                  )
+                })}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
     </div>

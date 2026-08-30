@@ -68,7 +68,8 @@ export function ImportDialog({ open, onOpenChange, file }: ImportDialogProps) {
 
         {file && (
           <p className="text-sm text-muted-foreground">
-            File: <span className="font-medium text-foreground">{file.name}</span>
+            File:{" "}
+            <span className="font-medium text-foreground">{file.name}</span>
           </p>
         )}
 

@@ -36,9 +36,7 @@ beforeEach(() => {
 })
 
 function renderSpools() {
-  const Stub = createRoutesStub([
-    { path: "/spools", Component: SpoolLibrary },
-  ])
+  const Stub = createRoutesStub([{ path: "/spools", Component: SpoolLibrary }])
   return render(<Stub initialEntries={["/spools"]} />)
 }
 
@@ -136,7 +134,11 @@ describe("SpoolLibrary route", () => {
     const addButton = screen.getByText("Add Spool").closest("button")!
     fireEvent.click(addButton)
 
-    expect(await screen.findByText("Add Spool", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+    expect(
+      await screen.findByText("Add Spool", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
   })
 
   it("edit button on SpoolCard opens form with pre-populated fields", async () => {
@@ -147,7 +149,11 @@ describe("SpoolLibrary route", () => {
     const editButton = screen.getByLabelText("Edit Test PLA")
     fireEvent.click(editButton)
 
-    expect(await screen.findByText("Edit Spool", { selector: "[data-slot='sheet-title'], [data-slot='drawer-title']" })).toBeTruthy()
+    expect(
+      await screen.findByText("Edit Spool", {
+        selector: "[data-slot='sheet-title'], [data-slot='drawer-title']",
+      })
+    ).toBeTruthy()
 
     const nameInput = screen.getByTestId("spool-name-input") as HTMLInputElement
     expect(nameInput.value).toBe("Test PLA")
@@ -167,7 +173,11 @@ describe("SpoolLibrary route", () => {
       const addButton = screen.getByText("Add Spool").closest("button")!
       fireEvent.click(addButton)
 
-      expect(await screen.findByText("Add Spool", { selector: "[data-slot='drawer-title']" })).toBeTruthy()
+      expect(
+        await screen.findByText("Add Spool", {
+          selector: "[data-slot='drawer-title']",
+        })
+      ).toBeTruthy()
     } finally {
       Object.defineProperty(window, "innerWidth", {
         writable: true,
@@ -199,14 +209,23 @@ describe("SpoolLibrary route", () => {
     await screen.findByRole("alertdialog")
 
     expect(screen.getByText("Delete Spool")).toBeTruthy()
-    expect(screen.getByText('Delete "Red PLA"? No figures use this spool.')).toBeTruthy()
+    expect(
+      screen.getByText('Delete "Red PLA"? No figures use this spool.')
+    ).toBeTruthy()
     expect(screen.getByText("Cancel")).toBeTruthy()
     expect(screen.getByText("Delete")).toBeTruthy()
   })
 
   it("referenced spool: AlertDialog shows Cannot Delete and lists figure names, no Delete button", async () => {
-    const spool = createSpool({ id: "spool-1", name: "Red PLA", hex: "#FF0000" })
-    const figure1 = createFigure({ name: "Naruto", requiredColors: ["spool-1"] })
+    const spool = createSpool({
+      id: "spool-1",
+      name: "Red PLA",
+      hex: "#FF0000",
+    })
+    const figure1 = createFigure({
+      name: "Naruto",
+      requiredColors: ["spool-1"],
+    })
     const figure2 = createFigure({ name: "Goku", requiredColors: ["spool-1"] })
     store.setState({
       spools: new Map([[spool.id, spool]]),
@@ -223,7 +242,9 @@ describe("SpoolLibrary route", () => {
     await screen.findByRole("alertdialog")
 
     expect(screen.getByText("Cannot Delete")).toBeTruthy()
-    expect(screen.getByText('"Red PLA" is used by the following figures:')).toBeTruthy()
+    expect(
+      screen.getByText('"Red PLA" is used by the following figures:')
+    ).toBeTruthy()
     expect(screen.getByText("Naruto")).toBeTruthy()
     expect(screen.getByText("Goku")).toBeTruthy()
     expect(screen.getByText("Close")).toBeTruthy()

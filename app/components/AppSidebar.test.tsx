@@ -134,10 +134,18 @@ describe("AppSidebar", () => {
   it("navigation items are links with correct paths", () => {
     renderSidebar()
 
-    expect(screen.getByText("Queue").closest("a")?.getAttribute("href")).toBe("/")
-    expect(screen.getByText("Figure Catalog").closest("a")?.getAttribute("href")).toBe("/catalog")
-    expect(screen.getByText("Filament Spools").closest("a")?.getAttribute("href")).toBe("/spools")
-    expect(screen.getByText("Completed").closest("a")?.getAttribute("href")).toBe("/completed")
+    expect(screen.getByText("Queue").closest("a")?.getAttribute("href")).toBe(
+      "/"
+    )
+    expect(
+      screen.getByText("Figure Catalog").closest("a")?.getAttribute("href")
+    ).toBe("/catalog")
+    expect(
+      screen.getByText("Filament Spools").closest("a")?.getAttribute("href")
+    ).toBe("/spools")
+    expect(
+      screen.getByText("Completed").closest("a")?.getAttribute("href")
+    ).toBe("/completed")
   })
 
   it("Import button click triggers hidden file input", () => {

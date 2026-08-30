@@ -16,6 +16,6 @@ export async function action({ request }: { request: Request }) {
       headers: {
         "Set-Cookie": await themeCookie.serialize(theme satisfies Theme),
       },
-    },
+    }
   )
 }

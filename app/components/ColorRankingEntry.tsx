@@ -21,6 +21,7 @@ import { Progress } from "~/components/ui/progress"
 import { Separator } from "~/components/ui/separator"
 import { ColorChip } from "~/components/ColorChip"
 import { QuantityBadge } from "~/components/QuantityBadge"
+import { OrderIdentity } from "~/components/OrderIdentity"
 import type { CompletionPhase } from "~/components/QueueItemCard"
 
 interface ColorRankingEntryProps {
@@ -58,6 +59,7 @@ export function ColorRankingEntry({
   const prevCompletionRef = useRef(new Map<string, boolean>())
   const completingRef = useRef(new Map<string, CompletionPhase>())
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
+  const orders = usePrintFlowStore((s) => s.orders)
   const lightness = getPerceivedLightness(entry.spool.hex)
   const open = controlledOpen ?? localOpen
   const handleOpenChange = onOpenChange ?? setLocalOpen
@@ -104,12 +106,12 @@ export function ColorRankingEntry({
       )
     })
     .toSorted((a, b) => {
-      if (a.type === "order" && b.type !== "order") return -1
-      if (a.type !== "order" && b.type === "order") return 1
+      if (a.orderId !== null && b.orderId === null) return -1
+      if (a.orderId === null && b.orderId !== null) return 1
       return 0
     })
 
-  const orderEndIndex = matchingItems.findIndex((qi) => qi.type !== "order")
+  const orderEndIndex = matchingItems.findIndex((qi) => qi.orderId === null)
   const hasOrderStockBoundary =
     orderEndIndex > 0 && orderEndIndex < matchingItems.length
 
@@ -141,9 +143,6 @@ export function ColorRankingEntry({
           <span className="text-xs text-muted-foreground">
             {entry.count === 1 ? "copy" : "copies"}
           </span>
-          {entry.hasOrders ? (
-            <Badge className="bg-order-muted text-order">Order</Badge>
-          ) : null}
           <span className="min-w-[2ch] text-right text-3xl font-extrabold tabular-nums">
             {entry.count}
           </span>
@@ -214,10 +213,8 @@ export function ColorRankingEntry({
                         </p>
                       ) : null}
                     </div>
-                    {qi.type === "order" ? (
-                      <Badge variant="outline" className="text-order">
-                        Order
-                      </Badge>
+                    {qi.orderId !== null && orders.get(qi.orderId) ? (
+                      <OrderIdentity order={orders.get(qi.orderId)!} compact />
                     ) : (
                       <Badge
                         variant="outline"

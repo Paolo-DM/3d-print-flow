@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
 
-import { createFigure, createQueueItem, createSpool } from "~/lib/test-utils"
+import {
+  createFigure,
+  createOrder,
+  createQueueItem,
+  createSpool,
+} from "~/lib/test-utils"
 import {
   computeAffectedQueueItems,
   computeColorRanking,
   computeCompletionStatus,
   computeFigureProgress,
+  computeOrderProgress,
+  computeQueueItemIssue,
+  computeQueueSummary,
+  deriveOrderState,
   getReferencingFigures,
   isCompletedToday,
+  isOrderOverdue,
+  parseQueueScope,
+  sortOrders,
 } from "~/lib/derived"
 
 describe("getReferencingFigures", () => {
@@ -169,7 +181,7 @@ describe("computeColorRanking", () => {
     const q1 = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       completedCounts: {},
     })
 
@@ -210,7 +222,7 @@ describe("computeColorRanking", () => {
     const q1 = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      type: "stock",
+      orderId: null,
       completedCounts: {},
     })
 
@@ -284,7 +296,7 @@ describe("computeColorRanking", () => {
     const partialOrder = createQueueItem({
       id: "q1",
       figureId: "fig-1",
-      type: "order",
+      orderId: "00000000-0000-4000-8000-000000000001",
       quantity: 2,
       completedCounts: { s1: 1 },
     })
@@ -480,5 +492,222 @@ describe("isCompletedToday", () => {
     const qi = createQueueItem({ completedAt: null })
 
     expect(isCompletedToday(qi, new Date(2026, 2, 31, 18, 0))).toBe(false)
+  })
+})
+
+describe("order work state and issues", () => {
+  const orderId = "00000000-0000-4000-8000-000000000001"
+  const spool = createSpool({ id: "s1" })
+
+  it("derives Draft, Active, Ready, and all three Blocked causes", () => {
+    const figures = new Map([
+      ["active", createFigure({ id: "active", requiredColors: ["s1"] })],
+      ["empty", createFigure({ id: "empty", requiredColors: [] })],
+      [
+        "missing-spool",
+        createFigure({ id: "missing-spool", requiredColors: ["gone"] }),
+      ],
+    ])
+    const spools = new Map([[spool.id, spool]])
+
+    expect(deriveOrderState(orderId, new Map(), figures, spools)).toBe("draft")
+
+    const active = createQueueItem({
+      id: "q-active",
+      figureId: "active",
+      orderId,
+    })
+    expect(
+      deriveOrderState(orderId, new Map([[active.id, active]]), figures, spools)
+    ).toBe("active")
+
+    const ready = {
+      ...active,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-30T12:00:00.000Z",
+    }
+    expect(
+      deriveOrderState(orderId, new Map([[ready.id, ready]]), figures, spools)
+    ).toBe("ready")
+
+    for (const figureId of ["gone", "empty", "missing-spool"]) {
+      const row = createQueueItem({ id: `q-${figureId}`, figureId, orderId })
+      expect(
+        deriveOrderState(orderId, new Map([[row.id, row]]), figures, spools)
+      ).toBe("blocked")
+    }
+  })
+
+  it("reports the exact repairable reason for each Blocked line", () => {
+    const missing = createQueueItem({ figureId: "gone", orderId })
+    expect(computeQueueItemIssue(missing, new Map(), new Map())?.type).toBe(
+      "missing-figure"
+    )
+
+    const emptyFigure = createFigure({ id: "empty", requiredColors: [] })
+    const empty = createQueueItem({ figureId: emptyFigure.id, orderId })
+    expect(
+      computeQueueItemIssue(
+        empty,
+        new Map([[emptyFigure.id, emptyFigure]]),
+        new Map()
+      )?.type
+    ).toBe("no-colors")
+
+    const missingSpoolFigure = createFigure({
+      id: "needs-spool",
+      requiredColors: ["gone"],
+    })
+    const missingSpool = createQueueItem({
+      figureId: missingSpoolFigure.id,
+      orderId,
+    })
+    const issue = computeQueueItemIssue(
+      missingSpool,
+      new Map([[missingSpoolFigure.id, missingSpoolFigure]]),
+      new Map()
+    )
+    expect(issue).toMatchObject({
+      type: "missing-spool",
+      spoolIds: ["gone"],
+    })
+  })
+
+  it("sums progress across every order line and quantity", () => {
+    const figures = new Map([
+      ["a", createFigure({ id: "a", requiredColors: ["s1", "s2"] })],
+      ["b", createFigure({ id: "b", requiredColors: ["s1"] })],
+    ])
+    const rows = new Map([
+      [
+        "qa",
+        createQueueItem({
+          id: "qa",
+          figureId: "a",
+          orderId,
+          quantity: 2,
+          completedCounts: { s1: 2, s2: 1 },
+        }),
+      ],
+      [
+        "qb",
+        createQueueItem({
+          id: "qb",
+          figureId: "b",
+          orderId,
+          completedCounts: { s1: 1 },
+        }),
+      ],
+    ])
+
+    expect(computeOrderProgress(orderId, rows, figures)).toEqual({
+      completed: 4,
+      total: 5,
+    })
+  })
+})
+
+describe("queue scopes and order urgency", () => {
+  const orderId = "00000000-0000-4000-8000-000000000001"
+
+  it("limits demand to an order without changing outstanding-copy sorting", () => {
+    const red = createSpool({ id: "red", name: "Red" })
+    const blue = createSpool({ id: "blue", name: "Blue" })
+    const figure = createFigure({
+      id: "figure",
+      requiredColors: ["red", "blue"],
+    })
+    const orderRow = createQueueItem({
+      id: "order-row",
+      figureId: figure.id,
+      orderId,
+      quantity: 3,
+      completedCounts: { blue: 2 },
+    })
+    const stockRow = createQueueItem({
+      id: "stock-row",
+      figureId: figure.id,
+      quantity: 9,
+    })
+
+    const result = computeColorRanking(
+      new Map([
+        [red.id, red],
+        [blue.id, blue],
+      ]),
+      new Map([[figure.id, figure]]),
+      new Map([
+        [orderRow.id, orderRow],
+        [stockRow.id, stockRow],
+      ]),
+      parseQueueScope(`order:${orderId}`)
+    )
+
+    expect(result.map(({ spool, count }) => [spool.id, count])).toEqual([
+      ["red", 3],
+      ["blue", 1],
+    ])
+  })
+
+  it("never marks Ready overdue and sorts overdue before due, creation, reference, id", () => {
+    const figure = createFigure({ id: "f", requiredColors: ["s"] })
+    const spool = createSpool({ id: "s" })
+    const figures = new Map([[figure.id, figure]])
+    const spools = new Map([[spool.id, spool]])
+    const overdue = createOrder({
+      id: orderId,
+      reference: "B",
+      dueDate: "2026-08-29",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    })
+    const ready = createOrder({
+      id: "00000000-0000-4000-8000-000000000002",
+      reference: "A",
+      dueDate: "2026-08-01",
+      createdAt: "2026-08-19T00:00:00.000Z",
+    })
+    const rows = new Map([
+      ["active", createQueueItem({ id: "active", figureId: "f", orderId })],
+      [
+        "ready",
+        createQueueItem({
+          id: "ready",
+          figureId: "f",
+          orderId: ready.id,
+          completedCounts: { s: 1 },
+        }),
+      ],
+    ])
+
+    expect(isOrderOverdue(overdue, "active", "2026-08-30")).toBe(true)
+    expect(isOrderOverdue(ready, "ready", "2026-08-30")).toBe(false)
+    expect(
+      sortOrders([ready, overdue], rows, figures, spools, "2026-08-30").map(
+        (order) => order.id
+      )
+    ).toEqual([overdue.id, ready.id])
+  })
+
+  it("summarizes scoped work, colors, lifecycle, and attention", () => {
+    const order = createOrder({ id: orderId })
+    const figure = createFigure({ id: "f", requiredColors: ["s"] })
+    const spool = createSpool({ id: "s" })
+    const row = createQueueItem({
+      id: "q",
+      figureId: figure.id,
+      orderId,
+      quantity: 2,
+      completedCounts: { s: 1 },
+    })
+
+    expect(
+      computeQueueSummary(
+        new Map([[order.id, order]]),
+        new Map([[row.id, row]]),
+        new Map([[figure.id, figure]]),
+        new Map([[spool.id, spool]]),
+        { kind: "order", orderId }
+      )
+    ).toEqual({ work: 1, colors: 1, active: 1, ready: 0, needsAttention: 0 })
   })
 })

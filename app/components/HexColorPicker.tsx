@@ -66,9 +66,7 @@ export function HexColorPicker({ value, onChange }: HexColorPickerProps) {
       </PopoverTrigger>
       <PopoverContent className="w-auto">
         <Suspense
-          fallback={
-            <div className="h-[200px] w-[200px] rounded bg-muted" />
-          }
+          fallback={<div className="h-[200px] w-[200px] rounded bg-muted" />}
         >
           <LazyHexColorPicker color={value} onChange={handlePickerChange} />
         </Suspense>

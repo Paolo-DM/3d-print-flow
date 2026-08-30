@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
 import { BookOpen, CheckCircle, Disc3, ListPlus } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
 import {
   computeColorRanking,
   computeCompletionStatus,
+  computeQueueItemIssue,
+  parseQueueScope,
+  queueItemMatchesScope,
+  queueScopeKey,
   type ColorRankingEntry as ColorRankingEntryType,
 } from "~/lib/derived"
 import { prefersReducedMotion } from "~/lib/motion"
@@ -20,7 +24,7 @@ import {
   EmptyTitle,
 } from "~/components/ui/empty"
 import { ColorRankingEntry } from "~/components/ColorRankingEntry"
-import type { CompletionPhase } from "~/components/QueueItemCard"
+import { QueueItemCard, type CompletionPhase } from "~/components/QueueItemCard"
 
 interface CompletingEntrySnapshot {
   entry: ColorRankingEntryType
@@ -31,6 +35,22 @@ interface CompletingEntrySnapshot {
 }
 
 export default function ColorView() {
+  const orders = usePrintFlowStore((state) => state.orders)
+  const [searchParams] = useSearchParams()
+  const parsedScope = parseQueueScope(searchParams.get("scope"))
+  const scope =
+    parsedScope.kind === "order" && !orders.has(parsedScope.orderId)
+      ? ({ kind: "all" } as const)
+      : parsedScope
+
+  return <ScopedColorView key={queueScopeKey(scope)} scope={scope} />
+}
+
+function ScopedColorView({
+  scope,
+}: {
+  scope: ReturnType<typeof parseQueueScope>
+}) {
   const [, setTick] = useState(0)
   const [openEntries, setOpenEntries] = useState(new Set<string>())
   const prevRankingRef = useRef(
@@ -44,11 +64,19 @@ export default function ColorView() {
   const spools = usePrintFlowStore((s) => s.spools)
   const brands = usePrintFlowStore((s) => s.brands)
   const figures = usePrintFlowStore((s) => s.figures)
-  const queueItems = usePrintFlowStore((s) => s.queueItems)
+  const allQueueItems = usePrintFlowStore((s) => s.queueItems)
   const navigate = useNavigate()
   const reducedMotion = prefersReducedMotion()
 
+  const queueItems = new Map(
+    Array.from(allQueueItems).filter(([, row]) =>
+      queueItemMatchesScope(row, scope)
+    )
+  )
   const ranking = computeColorRanking(spools, figures, queueItems)
+  const blockedItems = Array.from(queueItems.values()).filter((row) =>
+    computeQueueItemIssue(row, figures, spools)
+  )
   const currentRankingIds = new Set(ranking.map((e) => e.spool.id))
 
   // Detect if any figure just completed (drives entry-level animation)
@@ -173,7 +201,7 @@ export default function ColorView() {
       )
     }
 
-    if (queueItems.size === 0) {
+    if (allQueueItems.size === 0) {
       return (
         <Empty>
           <EmptyHeader>
@@ -192,24 +220,54 @@ export default function ColorView() {
       )
     }
 
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <CheckCircle />
-          </EmptyMedia>
-          <EmptyTitle>All colors complete!</EmptyTitle>
-          <EmptyDescription>
-            Every queued figure has all colors printed. Add more figures or
-            check the completed section.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
+    if (queueItems.size === 0) {
+      return (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CheckCircle />
+            </EmptyMedia>
+            <EmptyTitle>No color work in this scope</EmptyTitle>
+            <EmptyDescription>
+              Choose another queue scope to see its remaining color work.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )
+    }
+
+    if (blockedItems.length === 0)
+      return (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CheckCircle />
+            </EmptyMedia>
+            <EmptyTitle>All colors complete!</EmptyTitle>
+            <EmptyDescription>
+              Every queued figure has all colors printed. Add more figures or
+              check the completed section.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )
   }
 
   return (
     <div className="space-y-2">
+      {blockedItems.length > 0 ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {blockedItems.map((row) => (
+            <QueueItemCard
+              key={row.id}
+              queueItem={row}
+              figure={figures.get(row.figureId)}
+              brands={brands}
+              spools={spools}
+            />
+          ))}
+        </div>
+      ) : null}
       {ranking.map((entry, index) => (
         <div
           key={entry.spool.id}

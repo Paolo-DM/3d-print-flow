@@ -20,6 +20,7 @@ import {
 } from "~/components/ui/sidebar"
 import { TooltipProvider } from "~/components/ui/tooltip"
 import { initApp } from "~/lib/init"
+import { usePrintFlowStore } from "~/lib/store"
 import { type Theme, themeCookie } from "~/lib/theme.server"
 import "./app.css"
 
@@ -56,9 +57,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return data({ theme }, { headers })
 }
 
-export async function clientLoader({
-  serverLoader,
-}: Route.ClientLoaderArgs) {
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
   const [serverData] = await Promise.all([serverLoader(), initApp()])
   return serverData
 }
@@ -105,6 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 const pageTitles: Record<string, string> = {
   "/": "Queue",
+  "/orders": "Queue",
   "/figures": "Queue",
   "/catalog": "Figure Catalog",
   "/spools": "Filament Spools",
@@ -113,6 +113,10 @@ const pageTitles: Record<string, string> = {
 
 export default function App() {
   const { pathname } = useLocation()
+  const announcement = usePrintFlowStore((state) => state.announcement)
+  const announcementVersion = usePrintFlowStore(
+    (state) => state.announcementVersion
+  )
 
   const pageTitle = pageTitles[pathname] ?? ""
 
@@ -140,6 +144,14 @@ export default function App() {
           </div>
         </SidebarInset>
       </SidebarProvider>
+      <div
+        key={announcementVersion}
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {announcement}
+      </div>
       <Toaster />
     </TooltipProvider>
   )
