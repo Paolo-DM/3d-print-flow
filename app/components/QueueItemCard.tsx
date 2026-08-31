@@ -35,6 +35,11 @@ interface QueueItemCardProps {
   completionPhase?: CompletionPhase
   onCompletionPhaseEnd?: (phase: CompletionPhase) => void
   readOnly?: boolean
+  /**
+   * Finished Order Line presentation: color chips stay reversible so progress
+   * can be corrected, while quantity changes and removal are unavailable.
+   */
+  finished?: boolean
 }
 
 function RemoveLineDialog({
@@ -81,6 +86,29 @@ function RemoveLineDialog({
   )
 }
 
+function FinishedTimestamp({ completedAt }: { completedAt: string | null }) {
+  const isValidTimestamp =
+    completedAt !== null && Number.isFinite(Date.parse(completedAt))
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="finished-time">
+      {isValidTimestamp ? (
+        <>
+          Finished{" "}
+          <time dateTime={completedAt} className="tabular-nums">
+            {new Date(completedAt).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </time>
+        </>
+      ) : (
+        "Finished — time unavailable"
+      )}
+    </p>
+  )
+}
+
 export function QueueItemCard({
   queueItem,
   figure,
@@ -89,6 +117,7 @@ export function QueueItemCard({
   completionPhase,
   onCompletionPhaseEnd,
   readOnly = false,
+  finished = false,
 }: QueueItemCardProps) {
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
   const setQuantity = usePrintFlowStore((s) => s.setQuantity)
@@ -151,7 +180,7 @@ export function QueueItemCard({
           ) : (
             <span className="text-xs text-muted-foreground">Stock</span>
           )}
-          {!readOnly ? (
+          {!readOnly && !finished ? (
             <RemoveLineDialog
               queueItemId={queueItem.id}
               figureName={figure?.name ?? "this line"}
@@ -189,10 +218,12 @@ export function QueueItemCard({
                 </a>
               </Button>
             ) : null}
-            <RemoveLineDialog
-              queueItemId={queueItem.id}
-              figureName={figure?.name ?? "this line"}
-            />
+            {!finished ? (
+              <RemoveLineDialog
+                queueItemId={queueItem.id}
+                figureName={figure?.name ?? "this line"}
+              />
+            ) : null}
           </div>
         </div>
       ) : missingSpoolCount > 0 ? (
@@ -202,7 +233,9 @@ export function QueueItemCard({
         </p>
       ) : null}
       <div className="mt-auto flex items-center justify-between gap-2">
-        {!readOnly ? (
+        {finished ? (
+          <FinishedTimestamp completedAt={queueItem.completedAt} />
+        ) : !readOnly ? (
           <div
             className="flex items-center gap-1"
             role="group"

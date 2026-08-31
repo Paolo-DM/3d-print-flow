@@ -18,8 +18,10 @@ import {
   deriveOrderState,
   getReferencingFigures,
   isCompletedToday,
+  isFinishedOrderLine,
   isOrderOverdue,
   parseQueueScope,
+  sortFinishedLines,
   sortOrders,
 } from "~/lib/derived"
 
@@ -604,6 +606,221 @@ describe("order work state and issues", () => {
       completed: 4,
       total: 5,
     })
+  })
+})
+
+describe("isFinishedOrderLine", () => {
+  const orderId = "00000000-0000-4000-8000-000000000001"
+  const spool = createSpool({ id: "s1" })
+  const spools = new Map([[spool.id, spool]])
+  const figure = createFigure({ id: "f1", requiredColors: ["s1"] })
+  const figures = new Map([[figure.id, figure]])
+
+  function toMap(...rows: ReturnType<typeof createQueueItem>[]) {
+    return new Map(rows.map((row) => [row.id, row]))
+  }
+
+  it("retains a complete line while an incomplete sibling keeps the order active", () => {
+    const finished = createQueueItem({
+      id: "q-finished",
+      figureId: "f1",
+      orderId,
+      completedCounts: { s1: 1 },
+    })
+    const sibling = createQueueItem({
+      id: "q-sibling",
+      figureId: "f1",
+      orderId,
+      completedCounts: {},
+    })
+    const queueItems = toMap(finished, sibling)
+
+    expect(isFinishedOrderLine(finished, queueItems, figures, spools)).toBe(
+      true
+    )
+    expect(isFinishedOrderLine(sibling, queueItems, figures, spools)).toBe(
+      false
+    )
+  })
+
+  it("retains a complete line while a broken sibling keeps the order blocked", () => {
+    const finished = createQueueItem({
+      id: "q-finished",
+      figureId: "f1",
+      orderId,
+      completedCounts: { s1: 1 },
+    })
+    const broken = createQueueItem({
+      id: "q-broken",
+      figureId: "gone",
+      orderId,
+    })
+    const queueItems = toMap(finished, broken)
+
+    expect(deriveOrderState(orderId, queueItems, figures, spools)).toBe(
+      "blocked"
+    )
+    expect(isFinishedOrderLine(finished, queueItems, figures, spools)).toBe(
+      true
+    )
+    expect(isFinishedOrderLine(broken, queueItems, figures, spools)).toBe(false)
+  })
+
+  it("releases every line once the parent order is Ready", () => {
+    const finished = createQueueItem({
+      id: "q-finished",
+      figureId: "f1",
+      orderId,
+      completedCounts: { s1: 1 },
+    })
+    const queueItems = toMap(finished)
+
+    expect(deriveOrderState(orderId, queueItems, figures, spools)).toBe("ready")
+    expect(isFinishedOrderLine(finished, queueItems, figures, spools)).toBe(
+      false
+    )
+  })
+
+  it("never retains a complete stock line", () => {
+    const stock = createQueueItem({
+      id: "q-stock",
+      figureId: "f1",
+      orderId: null,
+      completedCounts: { s1: 1 },
+    })
+
+    expect(isFinishedOrderLine(stock, toMap(stock), figures, spools)).toBe(
+      false
+    )
+  })
+
+  it("never retains an orphaned line whose figure is missing", () => {
+    const orphaned = createQueueItem({
+      id: "q-orphaned",
+      figureId: "gone",
+      orderId,
+      completedCounts: { s1: 1 },
+    })
+
+    expect(
+      isFinishedOrderLine(orphaned, toMap(orphaned), figures, spools)
+    ).toBe(false)
+  })
+
+  it("never retains an invalid line: no required colors or missing spools", () => {
+    const noColors = createFigure({ id: "f-empty", requiredColors: [] })
+    const missingSpool = createFigure({
+      id: "f-missing-spool",
+      requiredColors: ["gone"],
+    })
+    const allFigures = new Map([
+      ...figures,
+      [noColors.id, noColors],
+      [missingSpool.id, missingSpool],
+    ])
+    const emptyLine = createQueueItem({
+      id: "q-empty",
+      figureId: noColors.id,
+      orderId,
+    })
+    const missingSpoolLine = createQueueItem({
+      id: "q-missing-spool",
+      figureId: missingSpool.id,
+      orderId,
+      completedCounts: { gone: 1 },
+    })
+    const queueItems = toMap(emptyLine, missingSpoolLine)
+
+    expect(isFinishedOrderLine(emptyLine, queueItems, allFigures, spools)).toBe(
+      false
+    )
+    expect(
+      isFinishedOrderLine(missingSpoolLine, queueItems, allFigures, spools)
+    ).toBe(false)
+  })
+
+  it("requires every color to reach the full quantity, ignoring completedAt", () => {
+    const partial = createQueueItem({
+      id: "q-partial",
+      figureId: "f1",
+      orderId,
+      quantity: 2,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-30T12:00:00.000Z",
+    })
+    const sibling = createQueueItem({
+      id: "q-sibling",
+      figureId: "f1",
+      orderId,
+      completedCounts: {},
+    })
+    const full = createQueueItem({
+      id: "q-full",
+      figureId: "f1",
+      orderId,
+      quantity: 2,
+      completedCounts: { s1: 2 },
+      completedAt: null,
+    })
+    const queueItems = toMap(partial, sibling, full)
+
+    expect(isFinishedOrderLine(partial, queueItems, figures, spools)).toBe(
+      false
+    )
+    expect(isFinishedOrderLine(full, queueItems, figures, spools)).toBe(true)
+  })
+})
+
+describe("sortFinishedLines", () => {
+  it("sorts timestamped lines newest-first, then missing timestamps last by id", () => {
+    const newest = createQueueItem({
+      id: "q-c",
+      completedAt: "2026-08-31T10:00:00.000Z",
+    })
+    const oldest = createQueueItem({
+      id: "q-d",
+      completedAt: "2026-08-01T10:00:00.000Z",
+    })
+    const missingA = createQueueItem({ id: "q-a", completedAt: null })
+    const missingB = createQueueItem({ id: "q-b", completedAt: null })
+
+    const result = sortFinishedLines([missingB, oldest, missingA, newest])
+
+    expect(result.map((row) => row.id)).toEqual(["q-c", "q-d", "q-a", "q-b"])
+  })
+
+  it("sorts an unreadable timestamp last, as the card shows no time for it", () => {
+    const timestamped = createQueueItem({
+      id: "q-a",
+      completedAt: "2026-08-01T10:00:00.000Z",
+    })
+    const unreadable = createQueueItem({
+      id: "q-b",
+      completedAt: "not-a-timestamp",
+    })
+    const missing = createQueueItem({ id: "q-c", completedAt: null })
+
+    expect(
+      sortFinishedLines([unreadable, missing, timestamped]).map((row) => row.id)
+    ).toEqual(["q-a", "q-b", "q-c"])
+  })
+
+  it("breaks equal timestamps by id and does not mutate its input", () => {
+    const first = createQueueItem({
+      id: "q-b",
+      completedAt: "2026-08-31T10:00:00.000Z",
+    })
+    const second = createQueueItem({
+      id: "q-a",
+      completedAt: "2026-08-31T10:00:00.000Z",
+    })
+    const input = [first, second]
+
+    expect(sortFinishedLines(input).map((row) => row.id)).toEqual([
+      "q-a",
+      "q-b",
+    ])
+    expect(input.map((row) => row.id)).toEqual(["q-b", "q-a"])
   })
 })
 

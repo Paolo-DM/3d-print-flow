@@ -392,6 +392,69 @@ describe("ColorView route", () => {
     expect(orderIndex).toBeLessThan(stockIndex)
   })
 
+  it("completed order lines neither rank nor persist within color entries", async () => {
+    const red = createSpool({ id: "s-red", name: "Red PLA", hex: "#FF0000" })
+    const blue = createSpool({ id: "s-blue", name: "Blue PLA", hex: "#0000FF" })
+    const finishedFigure = createFigure({
+      id: "f-finished",
+      name: "Finished figure",
+      requiredColors: [red.id, blue.id],
+    })
+    const pendingFigure = createFigure({
+      id: "f-pending",
+      name: "Pending figure",
+      requiredColors: [red.id],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const finishedRow = createQueueItem({
+      id: "q-finished",
+      figureId: finishedFigure.id,
+      orderId: order.id,
+      quantity: 3,
+      completedCounts: { [red.id]: 3, [blue.id]: 3 },
+      completedAt: "2026-08-31T13:22:48.666Z",
+    })
+    const pendingRow = createQueueItem({
+      id: "q-pending",
+      figureId: pendingFigure.id,
+      orderId: order.id,
+    })
+    store.setState({
+      spools: new Map([
+        [red.id, red],
+        [blue.id, blue],
+      ]),
+      figures: new Map([
+        [finishedFigure.id, finishedFigure],
+        [pendingFigure.id, pendingFigure],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [finishedRow.id, finishedRow],
+        [pendingRow.id, pendingRow],
+      ]),
+    })
+
+    renderColorView()
+
+    // Blue is demanded only by the finished line, so it must not rank at all;
+    // Red counts only the pending line's outstanding copy.
+    const entries = await screen.findAllByTestId("color-ranking-entry")
+    expect(entries).toHaveLength(1)
+    expect(entries[0].textContent).toContain("Red PLA")
+    expect(entries[0].textContent).not.toContain("Blue PLA")
+    // A single outstanding copy: the finished line's three copies never count.
+    expect(entries[0].textContent).toContain("copy")
+    expect(entries[0].textContent).not.toContain("copies")
+
+    // The finished line does not persist inside the expanded color entry.
+    fireEvent.click(entries[0])
+    expect(screen.getByText("Pending figure")).toBeTruthy()
+    expect(screen.queryByText("Finished figure")).toBeNull()
+  })
+
   it("keeps the disappearing entry open long enough to animate the completed row out", async () => {
     const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
     const figure = createFigure({

@@ -79,3 +79,15 @@
 - source_spec: `/Users/paolo/repos/personal/3d-print-flow/_bmad-output/implementation-artifacts/spec-queue-quantities.md`
   summary: Import normalization lacks a rebuildSpools sibling — spools pass through verbatim, so stray properties on spool rows survive import and re-export.
   evidence: rebuildBrands/rebuildFigures/rebuildQueueItems all strip stray props; `spools: parsed.data.spools` passes through raw in every import path (pre-existing before queue-quantities, surfaced by its review).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-completed-order-lines-in-queue.md`
+  summary: Nothing in version control stops the customer-data export from being committed — `3d-print-flow-export-2026-08-31.json` is untracked only by convention, with no `.gitignore` entry.
+  evidence: The spec's frozen intent says "Never … commit the export", but a single `git add -A` would stage it along with real customer names and order references. Deferred because adding the ignore rule edits a tracked file outside this spec's Code Map and task list.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-completed-order-lines-in-queue.md`
+  summary: The catalog holds two figures named "Misty" with the same ten required colors under different brands, and active ORD-001 references the Harry Potter one rather than the Pokemon one.
+  evidence: Figures `01a9b8a8-6de2-4515-bfbf-0c4682313037` (brand Harry Potter, referenced by ORD-001 line `1e0238d4-c2d7-4e1c-82aa-6ea56f82b741`) and `0601cade-7a59-4a4a-a6c9-bb64edf89038` (brand Pokemon) look like one figure duplicated under a wrong brand. Pre-existing user data — the catalog hashes byte-identical to pre-cleanup — and the spec's frozen intent both requires preserving all catalog data and puts further deletions behind Ask First.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-completed-order-lines-in-queue.md`
+  summary: An Order Line that is complete by count but carries its own issue (for example a deleted required spool) is invisible in the Figures view — excluded from Remaining as complete and from Finished as invalid — while it silently keeps its parent Order blocked.
+  evidence: Reproduced by rendering that state: the Figures tab shows the "All figures complete!" empty state while the queue layout summary directly above it reads "Needs attention 1", and the Order can never leave blocked from that tab. Pre-existing — the baseline Remaining filter already dropped complete lines, so such a line never appeared in Figures before this change either, and it is reachable only via `deleteSpool`, which removes a spool without touching `figures.requiredColors` or `completedCounts`. Surfaced by this story's review because the new Finished partition made the asymmetry explicit: `_queue.figures.tsx` drops the row from Remaining as complete and from Finished as invalid. Every "broken sibling" fixture in the figures tests uses `figureId: "gone"`, which is incomplete and so renders normally, leaving this class uncovered there.

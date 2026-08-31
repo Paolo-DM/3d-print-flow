@@ -384,6 +384,140 @@ describe("QueueItemCard", () => {
   })
 })
 
+describe("QueueItemCard finished lines", () => {
+  const finishedFigure = createFigure({
+    id: "f1",
+    name: "Silente",
+    brandId: "b1",
+    requiredColors: ["s-white", "s-red"],
+  })
+
+  function createFinishedItem(completedAt: string | null) {
+    return createQueueItem({
+      id: "q1",
+      figureId: finishedFigure.id,
+      orderId: "00000000-0000-4000-8000-000000000001",
+      quantity: 2,
+      completedCounts: { "s-white": 2, "s-red": 2 },
+      completedAt,
+    })
+  }
+
+  it("shows identity, quantity, progress, and a semantic completion time", () => {
+    const qi = createFinishedItem("2026-08-31T13:22:48.666Z")
+    const order = createOrder({ id: qi.orderId!, reference: "ORD-001" })
+    store.setState({ orders: new Map([[order.id, order]]) })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        finished
+      />
+    )
+
+    expect(screen.getByText("Silente")).toBeTruthy()
+    expect(screen.getByText("Shippuden")).toBeTruthy()
+    expect(screen.getByText("ORD-001")).toBeTruthy()
+    expect(screen.getByTestId("quantity-badge").textContent).toBe("×2")
+    expect(screen.getByText("4/4")).toBeTruthy()
+    const time = screen
+      .getByTestId("finished-time")
+      .querySelector("time") as HTMLTimeElement
+    expect(time).toBeTruthy()
+    expect(time.getAttribute("datetime")).toBe("2026-08-31T13:22:48.666Z")
+    expect(screen.getByTestId("finished-time").textContent).toMatch(/Finished/)
+  })
+
+  it("falls back when the completion time is missing or unreadable", () => {
+    const { unmount } = render(
+      <QueueItemCard
+        queueItem={createFinishedItem(null)}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        finished
+      />
+    )
+    expect(
+      screen.getByText("Finished — time unavailable").querySelector("time")
+    ).toBeNull()
+    unmount()
+
+    render(
+      <QueueItemCard
+        queueItem={createFinishedItem("not-a-timestamp")}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        finished
+      />
+    )
+    expect(screen.getByText("Finished — time unavailable")).toBeTruthy()
+  })
+
+  it("keeps color chips reversible so progress can be corrected", () => {
+    const qi = createFinishedItem("2026-08-31T13:22:48.666Z")
+    const toggleChip = vi.fn()
+    store.setState({
+      spools,
+      figures: new Map([[finishedFigure.id, finishedFigure]]),
+      queueItems: new Map([[qi.id, qi]]),
+      toggleChip,
+    })
+
+    render(
+      <QueueItemCard
+        queueItem={qi}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        finished
+      />
+    )
+
+    fireEvent.click(screen.getByLabelText("White PLA: 2 of 2 copies printed"))
+    expect(toggleChip).toHaveBeenCalledWith("q1", "s-white")
+  })
+
+  it("makes quantity changes and removal unavailable", () => {
+    render(
+      <QueueItemCard
+        queueItem={createFinishedItem("2026-08-31T13:22:48.666Z")}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        finished
+      />
+    )
+
+    expect(screen.queryByLabelText("Increase quantity of Silente")).toBeNull()
+    expect(screen.queryByLabelText("Decrease quantity of Silente")).toBeNull()
+    expect(screen.queryByTestId("quantity-value")).toBeNull()
+    expect(screen.queryByLabelText("Remove Silente")).toBeNull()
+  })
+
+  it("read-only completed history still locks its chips", () => {
+    render(
+      <QueueItemCard
+        queueItem={createFinishedItem("2026-08-31T13:22:48.666Z")}
+        figure={finishedFigure}
+        brands={brands}
+        spools={spools}
+        readOnly
+      />
+    )
+
+    const chip = screen.getByLabelText(
+      "White PLA: 2 of 2 copies printed"
+    ) as HTMLButtonElement
+    expect(chip.disabled).toBe(true)
+    expect(screen.getByText("Completed line")).toBeTruthy()
+  })
+})
+
 describe("QueueItemCard quantities", () => {
   it("shows a ×N badge next to the name when quantity > 1, nothing at 1", () => {
     const figure = createFigure({ id: "f1", requiredColors: ["s-white"] })

@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
@@ -352,6 +359,441 @@ describe("FigureView route", () => {
 
     const card = screen.getByTestId("queue-item-card")
     expect(card.className).not.toContain("animate-completion-pulse")
+  })
+
+  it("shows a finished order line once under Finished, after Remaining", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const silente = createFigure({
+      id: "f-silente",
+      name: "Silente",
+      requiredColors: ["s1"],
+    })
+    const pending = createFigure({
+      id: "f-pending",
+      name: "Pending figure",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "ORD-001",
+    })
+    const finishedRow = createQueueItem({
+      id: "q-finished",
+      figureId: silente.id,
+      orderId: order.id,
+      quantity: 2,
+      completedCounts: { s1: 2 },
+      completedAt: "2026-08-31T13:22:48.666Z",
+    })
+    const remainingRow = createQueueItem({
+      id: "q-remaining",
+      figureId: pending.id,
+      orderId: order.id,
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [silente.id, silente],
+        [pending.id, pending],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [finishedRow.id, finishedRow],
+        [remainingRow.id, remainingRow],
+      ]),
+    })
+
+    renderFigureView()
+
+    const remainingHeading = await screen.findByRole("heading", {
+      name: "Remaining",
+    })
+    const finishedHeading = screen.getByRole("heading", { name: "Finished" })
+    expect(
+      remainingHeading.compareDocumentPosition(finishedHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(screen.getAllByText("Silente")).toHaveLength(1)
+
+    const finishedSection = finishedHeading.closest("section") as HTMLElement
+    const finishedCard = within(finishedSection).getByTestId("queue-item-card")
+    expect(finishedCard.textContent).toContain("Silente")
+    expect(finishedCard.textContent).toContain("ORD-001")
+    expect(finishedCard.textContent).toContain("×2")
+    expect(finishedCard.textContent).toContain("2/2")
+    expect(finishedCard.querySelector("time")?.getAttribute("datetime")).toBe(
+      "2026-08-31T13:22:48.666Z"
+    )
+
+    const remainingSection = remainingHeading.closest("section") as HTMLElement
+    expect(within(remainingSection).getByText("Pending figure")).toBeTruthy()
+  })
+
+  it("scopes finished lines: hidden in stock scope, present in the order scope", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Order line",
+      requiredColors: ["s1"],
+    })
+    const stockFigure = createFigure({
+      id: "f2",
+      name: "Stock line",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const finishedRow = createQueueItem({
+      id: "q-finished",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-31T13:22:48.666Z",
+    })
+    const siblingRow = createQueueItem({
+      id: "q-sibling",
+      figureId: figure.id,
+      orderId: order.id,
+    })
+    const stockRow = createQueueItem({
+      id: "q-stock",
+      figureId: stockFigure.id,
+      orderId: null,
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [figure.id, figure],
+        [stockFigure.id, stockFigure],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [finishedRow.id, finishedRow],
+        [siblingRow.id, siblingRow],
+        [stockRow.id, stockRow],
+      ]),
+    })
+
+    const { unmount } = renderFigureView("/figures?scope=stock")
+    expect(await screen.findByText("Stock line")).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Finished" })).toBeNull()
+    expect(screen.queryByText("Order line")).toBeNull()
+    unmount()
+
+    renderFigureView(`/figures?scope=order:${order.id}`)
+    expect(
+      await screen.findByRole("heading", { name: "Finished" })
+    ).toBeTruthy()
+    expect(screen.getAllByText("Order line")).toHaveLength(2)
+    expect(screen.queryByText("Stock line")).toBeNull()
+  })
+
+  it("never leaks completed stock lines or Ready order lines into the queue", async () => {
+    const spool = createSpool({ id: "s1" })
+    const readyFigure = createFigure({
+      id: "f-ready",
+      name: "Ready line",
+      requiredColors: ["s1"],
+    })
+    const stockFigure = createFigure({
+      id: "f-stock",
+      name: "Done stock",
+      requiredColors: ["s1"],
+    })
+    const activeFigure = createFigure({
+      id: "f-active",
+      name: "Active line",
+      requiredColors: ["s1"],
+    })
+    const readyOrder = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+      reference: "READY",
+    })
+    const readyRow = createQueueItem({
+      id: "q-ready",
+      figureId: readyFigure.id,
+      orderId: readyOrder.id,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-31T13:22:48.666Z",
+    })
+    const stockRow = createQueueItem({
+      id: "q-done-stock",
+      figureId: stockFigure.id,
+      orderId: null,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-30T13:22:48.666Z",
+    })
+    const activeRow = createQueueItem({
+      id: "q-active",
+      figureId: activeFigure.id,
+      orderId: null,
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [readyFigure.id, readyFigure],
+        [stockFigure.id, stockFigure],
+        [activeFigure.id, activeFigure],
+      ]),
+      orders: new Map([[readyOrder.id, readyOrder]]),
+      queueItems: new Map([
+        [readyRow.id, readyRow],
+        [stockRow.id, stockRow],
+        [activeRow.id, activeRow],
+      ]),
+    })
+
+    renderFigureView()
+
+    expect(await screen.findByText("Active line")).toBeTruthy()
+    expect(screen.queryByText("Ready line")).toBeNull()
+    expect(screen.queryByText("Done stock")).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Finished" })).toBeNull()
+  })
+
+  it("keeps a finished line while its broken sibling stays Remaining, with a time fallback", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Finished figure",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const finishedRow = createQueueItem({
+      id: "q-finished",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: { s1: 1 },
+      completedAt: null,
+    })
+    const brokenRow = createQueueItem({
+      id: "q-broken",
+      figureId: "gone",
+      orderId: order.id,
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [finishedRow.id, finishedRow],
+        [brokenRow.id, brokenRow],
+      ]),
+    })
+
+    renderFigureView()
+
+    expect(
+      await screen.findByRole("heading", { name: "Finished" })
+    ).toBeTruthy()
+    expect(screen.getByText("Finished figure")).toBeTruthy()
+    expect(screen.getByText("Finished — time unavailable")).toBeTruthy()
+    const brokenCard = screen
+      .getByText("Missing figure")
+      .closest("[data-testid='queue-item-card']") as HTMLElement
+    expect(within(brokenCard).getByText("Needs attention")).toBeTruthy()
+  })
+
+  it("relocates a completing order line to Finished only after its cascade ends", async () => {
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      requiredColors: ["s1"],
+    })
+    const sibling = createFigure({
+      id: "f2",
+      name: "Vegeta",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const row = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: {},
+    })
+    const siblingRow = createQueueItem({
+      id: "q2",
+      figureId: sibling.id,
+      orderId: order.id,
+      completedCounts: {},
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [figure.id, figure],
+        [sibling.id, sibling],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [row.id, row],
+        [siblingRow.id, siblingRow],
+      ]),
+    })
+
+    renderFigureView()
+    await screen.findByText("Goku")
+
+    fireEvent.click(
+      within(
+        screen
+          .getByText("Goku")
+          .closest("[data-testid='queue-item-card']") as HTMLElement
+      ).getByLabelText("Mark Red PLA as printed")
+    )
+
+    // While the cascade runs the line pulses in place and appears only once.
+    const pulsingCard = screen
+      .getByText("Goku")
+      .closest("[data-testid='queue-item-card']") as HTMLElement
+    expect(pulsingCard.className).toContain("animate-completion-pulse")
+    expect(screen.getAllByText("Goku")).toHaveLength(1)
+    expect(screen.queryByRole("heading", { name: "Finished" })).toBeNull()
+
+    // jsdom has no AnimationEvent, so React 19 delegates the vendor-prefixed
+    // event name — dispatch what React actually listens for.
+    act(() => {
+      pulsingCard.dispatchEvent(
+        new Event("webkitAnimationEnd", { bubbles: true })
+      )
+    })
+    expect(pulsingCard.className).toContain("animate-completion-collapse")
+    act(() => {
+      pulsingCard.dispatchEvent(
+        new Event("webkitAnimationEnd", { bubbles: true })
+      )
+    })
+
+    const finishedSection = screen
+      .getByRole("heading", { name: "Finished" })
+      .closest("section") as HTMLElement
+    expect(within(finishedSection).getByText("Goku")).toBeTruthy()
+    expect(screen.getAllByText("Goku")).toHaveLength(1)
+    const remainingSection = screen
+      .getByRole("heading", { name: "Remaining" })
+      .closest("section") as HTMLElement
+    expect(within(remainingSection).getByText("Vegeta")).toBeTruthy()
+  })
+
+  it("relocates immediately and reversibly under reduced motion", async () => {
+    prefersReducedMotion = true
+
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Goku",
+      requiredColors: ["s1"],
+    })
+    const sibling = createFigure({
+      id: "f2",
+      name: "Vegeta",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const row = createQueueItem({
+      id: "q1",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: {},
+    })
+    const siblingRow = createQueueItem({
+      id: "q2",
+      figureId: sibling.id,
+      orderId: order.id,
+      completedCounts: {},
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([
+        [figure.id, figure],
+        [sibling.id, sibling],
+      ]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [row.id, row],
+        [siblingRow.id, siblingRow],
+      ]),
+    })
+
+    renderFigureView()
+    await screen.findByText("Goku")
+
+    fireEvent.click(
+      within(
+        screen
+          .getByText("Goku")
+          .closest("[data-testid='queue-item-card']") as HTMLElement
+      ).getByLabelText("Mark Red PLA as printed")
+    )
+
+    const finishedSection = screen
+      .getByRole("heading", { name: "Finished" })
+      .closest("section") as HTMLElement
+    const finishedCard = within(finishedSection).getByTestId("queue-item-card")
+    expect(finishedCard.textContent).toContain("Goku")
+    expect(finishedCard.className).not.toContain("animate-completion")
+
+    // The chip stays reversible: unmarking returns the line to Remaining.
+    fireEvent.click(within(finishedCard).getByLabelText("Unmark Red PLA"))
+    expect(screen.queryByRole("heading", { name: "Finished" })).toBeNull()
+    expect(screen.getByText("Goku")).toBeTruthy()
+  })
+
+  it("moves a scoped order's lines out of the queue once it becomes Ready", async () => {
+    prefersReducedMotion = true
+
+    const spool = createSpool({ id: "s1", name: "Red PLA", hex: "#FF0000" })
+    const figure = createFigure({
+      id: "f1",
+      name: "Final line",
+      requiredColors: ["s1"],
+    })
+    const order = createOrder({
+      id: "00000000-0000-4000-8000-000000000001",
+    })
+    const finishedRow = createQueueItem({
+      id: "q-finished",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: { s1: 1 },
+      completedAt: "2026-08-31T13:22:48.666Z",
+    })
+    const lastRow = createQueueItem({
+      id: "q-last",
+      figureId: figure.id,
+      orderId: order.id,
+      completedCounts: {},
+    })
+    store.setState({
+      spools: new Map([[spool.id, spool]]),
+      figures: new Map([[figure.id, figure]]),
+      orders: new Map([[order.id, order]]),
+      queueItems: new Map([
+        [finishedRow.id, finishedRow],
+        [lastRow.id, lastRow],
+      ]),
+    })
+
+    renderFigureView(`/figures?scope=order:${order.id}`)
+    await screen.findByRole("heading", { name: "Finished" })
+
+    const remainingSection = screen
+      .getByRole("heading", { name: "Remaining" })
+      .closest("section") as HTMLElement
+    fireEvent.click(
+      within(remainingSection).getByLabelText("Mark Red PLA as printed")
+    )
+
+    expect(screen.queryByTestId("queue-item-card")).toBeNull()
+    expect(screen.getByText("All figures complete!")).toBeTruthy()
   })
 
   it("removes completed items immediately when reduced motion is enabled", async () => {

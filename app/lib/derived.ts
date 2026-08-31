@@ -209,6 +209,53 @@ export function deriveOrderState(
   return deriveRowsState(getOrderRows(orderId, queueItems), figures, spools)
 }
 
+/**
+ * A Finished Order Line: an issue-free Order Line whose every required color
+ * is printed for every copy — derived from current Figure colors and quantity,
+ * never from `completedAt`. It is retained in the Queue as correctable
+ * progress evidence until its parent Order becomes Ready. Stock Lines never
+ * qualify: once complete they belong in Completed.
+ */
+export function isFinishedOrderLine(
+  queueItem: QueueItem,
+  queueItems: Map<string, QueueItem>,
+  figures: Map<string, Figure>,
+  spools: Map<string, Spool>
+): boolean {
+  if (queueItem.orderId === null) return false
+  if (!computeCompletionStatus(queueItem, figures.get(queueItem.figureId))) {
+    return false
+  }
+  if (computeQueueItemIssue(queueItem, figures, spools)) return false
+  return (
+    deriveOrderState(queueItem.orderId, queueItems, figures, spools) !== "ready"
+  )
+}
+
+/**
+ * Newest completion first; lines whose timestamp is missing or unreadable last,
+ * ordered by id. An unreadable timestamp sorts as missing so the order matches
+ * the card, which renders those lines without a time.
+ */
+export function sortFinishedLines(rows: readonly QueueItem[]): QueueItem[] {
+  return rows.toSorted((left, right) => {
+    const leftTime = finishedAtTime(left)
+    const rightTime = finishedAtTime(right)
+    if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
+      return rightTime - leftTime
+    }
+    if (leftTime !== null && rightTime === null) return -1
+    if (leftTime === null && rightTime !== null) return 1
+    return left.id.localeCompare(right.id)
+  })
+}
+
+function finishedAtTime(row: QueueItem): number | null {
+  if (row.completedAt === null) return null
+  const parsed = Date.parse(row.completedAt)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function computeOrderProgress(
   orderId: string,
   queueItems: Map<string, QueueItem>,

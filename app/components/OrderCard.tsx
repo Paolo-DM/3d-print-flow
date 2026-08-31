@@ -6,7 +6,9 @@ import {
   computeOrderProgress,
   deriveOrderState,
   getOrderRows,
+  isFinishedOrderLine,
   isOrderOverdue,
+  sortFinishedLines,
 } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Order } from "~/lib/types"
@@ -37,6 +39,16 @@ export function OrderCard({ order, today }: { order: Order; today: string }) {
   const queueItems = usePrintFlowStore((state) => state.queueItems)
   const deleteOrder = usePrintFlowStore((state) => state.deleteOrder)
   const rows = getOrderRows(order.id, queueItems)
+  const remainingRows: typeof rows = []
+  const completedRows: typeof rows = []
+  for (const row of rows) {
+    if (isFinishedOrderLine(row, queueItems, figures, spools)) {
+      completedRows.push(row)
+    } else {
+      remainingRows.push(row)
+    }
+  }
+  const finishedRows = sortFinishedLines(completedRows)
   const state = deriveOrderState(order.id, queueItems, figures, spools)
   const progress = computeOrderProgress(order.id, queueItems, figures)
   const percentage = progress.total
@@ -138,26 +150,57 @@ export function OrderCard({ order, today }: { order: Order; today: string }) {
               {progress.completed}/{progress.total}
             </span>
           </div>
-          <div
-            className={cn(
-              "mt-4 grid gap-3",
-              rows.length > 1 && "md:grid-cols-2"
-            )}
-          >
-            {rows.map((row) => (
-              <QueueItemCard
-                key={row.id}
-                queueItem={row}
-                figure={figures.get(row.figureId)}
-                brands={brands}
-                spools={spools}
-                readOnly={computeCompletionStatus(
-                  row,
-                  figures.get(row.figureId)
+          {remainingRows.length > 0 ? (
+            <div
+              className={cn(
+                "mt-4 grid gap-3",
+                remainingRows.length > 1 && "md:grid-cols-2"
+              )}
+            >
+              {remainingRows.map((row) => (
+                <QueueItemCard
+                  key={row.id}
+                  queueItem={row}
+                  figure={figures.get(row.figureId)}
+                  brands={brands}
+                  spools={spools}
+                  // A complete row that is not a Finished Order Line is blocked
+                  // by its own issue; it stays locked as it was before.
+                  readOnly={computeCompletionStatus(
+                    row,
+                    figures.get(row.figureId)
+                  )}
+                />
+              ))}
+            </div>
+          ) : null}
+          {finishedRows.length > 0 ? (
+            <section
+              aria-label={`Finished lines for ${order.reference}`}
+              className="mt-4"
+            >
+              <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+                Finished
+              </h3>
+              <div
+                className={cn(
+                  "grid gap-3",
+                  finishedRows.length > 1 && "md:grid-cols-2"
                 )}
-              />
-            ))}
-          </div>
+              >
+                {finishedRows.map((row) => (
+                  <QueueItemCard
+                    key={row.id}
+                    queueItem={row}
+                    figure={figures.get(row.figureId)}
+                    brands={brands}
+                    spools={spools}
+                    finished
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
     </article>

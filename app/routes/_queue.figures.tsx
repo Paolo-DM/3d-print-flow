@@ -5,9 +5,11 @@ import { BookOpen, CheckCircle, Disc3, ListPlus } from "lucide-react"
 import { usePrintFlowStore } from "~/lib/store"
 import {
   computeCompletionStatus,
+  isFinishedOrderLine,
   parseQueueScope,
   queueItemMatchesScope,
   queueScopeKey,
+  sortFinishedLines,
 } from "~/lib/derived"
 import { prefersReducedMotion } from "~/lib/motion"
 import { Button } from "~/components/ui/button"
@@ -169,7 +171,7 @@ function ScopedFigureView({
   }
 
   // Include incomplete items + items in the completion animation
-  const visibleItems = Array.from(queueItems.values())
+  const remainingItems = Array.from(queueItems.values())
     .filter((qi) => {
       const figure = figures.get(qi.figureId)
       if (!figure) return true
@@ -183,7 +185,17 @@ function ScopedFigureView({
       return a.id.localeCompare(b.id)
     })
 
-  if (visibleItems.length === 0) {
+  // Finished Order Lines stay as correctable progress evidence, relocating
+  // here only once their completion animation has finished (never twice).
+  const finishedItems = sortFinishedLines(
+    Array.from(queueItems.values()).filter(
+      (qi) =>
+        isFinishedOrderLine(qi, allQueueItems, figures, spools) &&
+        !completingRef.current.has(qi.id)
+    )
+  )
+
+  if (remainingItems.length === 0 && finishedItems.length === 0) {
     return (
       <Empty>
         <EmptyHeader>
@@ -200,9 +212,9 @@ function ScopedFigureView({
     )
   }
 
-  return (
-    <div className="grid animate-fade-in-up grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {visibleItems.map((qi) => {
+  const remainingGrid = (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {remainingItems.map((qi) => {
         const figure = figures.get(qi.figureId)
         const phase = completingRef.current.get(qi.id)
         return (
@@ -224,6 +236,43 @@ function ScopedFigureView({
           />
         )
       })}
+    </div>
+  )
+
+  if (finishedItems.length === 0) {
+    return <div className="animate-fade-in-up">{remainingGrid}</div>
+  }
+
+  return (
+    <div className="animate-fade-in-up space-y-6">
+      {remainingItems.length > 0 ? (
+        <section aria-labelledby="remaining-lines-heading">
+          <h2
+            id="remaining-lines-heading"
+            className="mb-3 text-lg font-semibold"
+          >
+            Remaining
+          </h2>
+          {remainingGrid}
+        </section>
+      ) : null}
+      <section aria-labelledby="finished-lines-heading">
+        <h2 id="finished-lines-heading" className="mb-3 text-lg font-semibold">
+          Finished
+        </h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {finishedItems.map((qi) => (
+            <QueueItemCard
+              key={qi.id}
+              queueItem={qi}
+              figure={figures.get(qi.figureId)}
+              brands={brands}
+              spools={spools}
+              finished
+            />
+          ))}
+        </div>
+      </section>
     </div>
   )
 }
