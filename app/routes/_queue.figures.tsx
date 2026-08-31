@@ -268,7 +268,7 @@ function ScopedFigureView({
               figure={figures.get(qi.figureId)}
               brands={brands}
               spools={spools}
-              finished
+              mode="finished"
             />
           ))}
         </div>

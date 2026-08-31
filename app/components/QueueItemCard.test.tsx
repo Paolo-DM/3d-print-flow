@@ -414,7 +414,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        finished
+        mode="finished"
       />
     )
 
@@ -438,7 +438,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        finished
+        mode="finished"
       />
     )
     expect(
@@ -452,7 +452,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        finished
+        mode="finished"
       />
     )
     expect(screen.getByText("Finished — time unavailable")).toBeTruthy()
@@ -474,7 +474,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        finished
+        mode="finished"
       />
     )
 
@@ -489,7 +489,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        finished
+        mode="finished"
       />
     )
 
@@ -506,7 +506,7 @@ describe("QueueItemCard finished lines", () => {
         figure={finishedFigure}
         brands={brands}
         spools={spools}
-        readOnly
+        mode="readOnly"
       />
     )
 

@@ -25,20 +25,24 @@ export function isValidLocalDate(value: string): boolean {
   return day <= daysInMonth[month - 1]
 }
 
-export function isCanonicalISOString(value: string): boolean {
+/** Milliseconds for a readable timestamp; null when absent or unparseable. */
+export function parseTimestamp(
+  value: string | null | undefined
+): number | null {
+  if (!value) return null
   const timestamp = Date.parse(value)
-  return (
-    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
-  )
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+export function isCanonicalISOString(value: string): boolean {
+  const timestamp = parseTimestamp(value)
+  return timestamp !== null && new Date(timestamp).toISOString() === value
 }
 
 export function toCanonicalISOString(
   value: string | null | undefined,
   fallback: string
 ): string {
-  if (!value) return fallback
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp)
-    ? new Date(timestamp).toISOString()
-    : fallback
+  const timestamp = parseTimestamp(value)
+  return timestamp === null ? fallback : new Date(timestamp).toISOString()
 }

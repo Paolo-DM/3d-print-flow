@@ -1,3 +1,4 @@
+import { parseTimestamp } from "~/lib/date"
 import type { Figure, Order, QueueItem, Spool } from "~/lib/types"
 
 export interface ColorRankingEntry {
@@ -239,8 +240,8 @@ export function isFinishedOrderLine(
  */
 export function sortFinishedLines(rows: readonly QueueItem[]): QueueItem[] {
   return rows.toSorted((left, right) => {
-    const leftTime = finishedAtTime(left)
-    const rightTime = finishedAtTime(right)
+    const leftTime = parseTimestamp(left.completedAt)
+    const rightTime = parseTimestamp(right.completedAt)
     if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
       return rightTime - leftTime
     }
@@ -248,12 +249,6 @@ export function sortFinishedLines(rows: readonly QueueItem[]): QueueItem[] {
     if (leftTime === null && rightTime !== null) return 1
     return left.id.localeCompare(right.id)
   })
-}
-
-function finishedAtTime(row: QueueItem): number | null {
-  if (row.completedAt === null) return null
-  const parsed = Date.parse(row.completedAt)
-  return Number.isFinite(parsed) ? parsed : null
 }
 
 export function computeOrderProgress(

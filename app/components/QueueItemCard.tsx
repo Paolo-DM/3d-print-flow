@@ -1,5 +1,6 @@
 import { Minus, Plus, Trash2 } from "lucide-react"
 
+import { parseTimestamp } from "~/lib/date"
 import { MAX_QUEUE_QUANTITY, usePrintFlowStore } from "~/lib/store"
 import {
   computeCompletionStatus,
@@ -27,6 +28,15 @@ import { OrderIdentity } from "~/components/OrderIdentity"
 
 export type CompletionPhase = "pulsing" | "collapsing"
 
+/**
+ * How a queue line presents itself:
+ * - `editable` — the active queue: chips, quantity, and removal all available.
+ * - `readOnly` — completed history: nothing about the line can be changed.
+ * - `finished` — a Finished Order Line: chips stay reversible so progress can
+ *   be corrected, while quantity changes and removal are unavailable.
+ */
+export type QueueItemCardMode = "editable" | "readOnly" | "finished"
+
 interface QueueItemCardProps {
   queueItem: QueueItem
   figure: Figure | null | undefined
@@ -34,12 +44,7 @@ interface QueueItemCardProps {
   spools: Map<string, Spool>
   completionPhase?: CompletionPhase
   onCompletionPhaseEnd?: (phase: CompletionPhase) => void
-  readOnly?: boolean
-  /**
-   * Finished Order Line presentation: color chips stay reversible so progress
-   * can be corrected, while quantity changes and removal are unavailable.
-   */
-  finished?: boolean
+  mode?: QueueItemCardMode
 }
 
 function RemoveLineDialog({
@@ -87,15 +92,14 @@ function RemoveLineDialog({
 }
 
 function FinishedTimestamp({ completedAt }: { completedAt: string | null }) {
-  const isValidTimestamp =
-    completedAt !== null && Number.isFinite(Date.parse(completedAt))
+  const timestamp = parseTimestamp(completedAt)
   return (
     <p className="text-xs text-muted-foreground" data-testid="finished-time">
-      {isValidTimestamp ? (
+      {completedAt !== null && timestamp !== null ? (
         <>
           Finished{" "}
           <time dateTime={completedAt} className="tabular-nums">
-            {new Date(completedAt).toLocaleDateString(undefined, {
+            {new Date(timestamp).toLocaleDateString(undefined, {
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -116,9 +120,10 @@ export function QueueItemCard({
   spools,
   completionPhase,
   onCompletionPhaseEnd,
-  readOnly = false,
-  finished = false,
+  mode = "editable",
 }: QueueItemCardProps) {
+  const isFinished = mode === "finished"
+  const isEditable = mode === "editable"
   const toggleChip = usePrintFlowStore((s) => s.toggleChip)
   const setQuantity = usePrintFlowStore((s) => s.setQuantity)
   const orders = usePrintFlowStore((s) => s.orders)
@@ -180,7 +185,7 @@ export function QueueItemCard({
           ) : (
             <span className="text-xs text-muted-foreground">Stock</span>
           )}
-          {!readOnly && !finished ? (
+          {isEditable ? (
             <RemoveLineDialog
               queueItemId={queueItem.id}
               figureName={figure?.name ?? "this line"}
@@ -200,7 +205,9 @@ export function QueueItemCard({
               count={queueItem.completedCounts[spoolId] ?? 0}
               quantity={queueItem.quantity}
               onClick={
-                readOnly ? undefined : () => toggleChip(queueItem.id, spoolId)
+                mode === "readOnly"
+                  ? undefined
+                  : () => toggleChip(queueItem.id, spoolId)
               }
             />
           )
@@ -218,7 +225,7 @@ export function QueueItemCard({
                 </a>
               </Button>
             ) : null}
-            {!finished ? (
+            {!isFinished ? (
               <RemoveLineDialog
                 queueItemId={queueItem.id}
                 figureName={figure?.name ?? "this line"}
@@ -233,9 +240,9 @@ export function QueueItemCard({
         </p>
       ) : null}
       <div className="mt-auto flex items-center justify-between gap-2">
-        {finished ? (
+        {isFinished ? (
           <FinishedTimestamp completedAt={queueItem.completedAt} />
-        ) : !readOnly ? (
+        ) : isEditable ? (
           <div
             className="flex items-center gap-1"
             role="group"

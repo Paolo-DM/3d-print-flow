@@ -213,7 +213,7 @@ function ReadyOrder({ order }: { order: Order }) {
             figure={figures.get(row.figureId)}
             brands={brands}
             spools={spools}
-            readOnly
+            mode="readOnly"
           />
         ))}
       </div>

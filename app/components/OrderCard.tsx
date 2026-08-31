@@ -166,10 +166,11 @@ export function OrderCard({ order, today }: { order: Order; today: string }) {
                   spools={spools}
                   // A complete row that is not a Finished Order Line is blocked
                   // by its own issue; it stays locked as it was before.
-                  readOnly={computeCompletionStatus(
-                    row,
-                    figures.get(row.figureId)
-                  )}
+                  mode={
+                    computeCompletionStatus(row, figures.get(row.figureId))
+                      ? "readOnly"
+                      : "editable"
+                  }
                 />
               ))}
             </div>
@@ -195,7 +196,7 @@ export function OrderCard({ order, today }: { order: Order; today: string }) {
                     figure={figures.get(row.figureId)}
                     brands={brands}
                     spools={spools}
-                    finished
+                    mode="finished"
                   />
                 ))}
               </div>

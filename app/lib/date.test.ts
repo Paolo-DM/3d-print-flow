@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   isCanonicalISOString,
   isValidLocalDate,
+  parseTimestamp,
   toCanonicalISOString,
 } from "~/lib/date"
 
@@ -17,6 +18,24 @@ describe("local date validation", () => {
     expect(isValidLocalDate("1900-02-29")).toBe(false)
     expect(isValidLocalDate("2026-04-31")).toBe(false)
     expect(isValidLocalDate("0000-01-01")).toBe(false)
+  })
+})
+
+describe("parseTimestamp", () => {
+  it("returns milliseconds for a readable timestamp", () => {
+    expect(parseTimestamp("2026-08-30T10:00:00.000Z")).toBe(
+      Date.UTC(2026, 7, 30, 10)
+    )
+    expect(parseTimestamp("2026-08-30T10:00:00Z")).toBe(
+      Date.UTC(2026, 7, 30, 10)
+    )
+  })
+
+  it("returns null when the value is absent or unreadable", () => {
+    expect(parseTimestamp(null)).toBe(null)
+    expect(parseTimestamp(undefined)).toBe(null)
+    expect(parseTimestamp("")).toBe(null)
+    expect(parseTimestamp("not-a-timestamp")).toBe(null)
   })
 })
 
