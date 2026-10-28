@@ -8,7 +8,7 @@ import {
   computeQueueItemIssue,
 } from "~/lib/derived"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
-import { cn } from "~/lib/utils"
+import { cn, pluralize } from "~/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +23,7 @@ import {
 import { Button } from "~/components/ui/button"
 import { Progress } from "~/components/ui/progress"
 import { ColorChip } from "~/components/ColorChip"
+import { Notes } from "~/components/Notes"
 import { QuantityBadge } from "~/components/QuantityBadge"
 import { OrderIdentity } from "~/components/OrderIdentity"
 
@@ -153,7 +154,7 @@ export function QueueItemCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-lg border p-3 shadow-sm transition-shadow duration-200 hover:shadow",
+        "flex flex-col gap-2 rounded-lg border p-3 shadow-sm",
         completionPhase === "pulsing" && "animate-completion-pulse",
         completionPhase === "collapsing" &&
           "animate-completion-collapse overflow-hidden"
@@ -213,6 +214,7 @@ export function QueueItemCard({
           )
         })}
       </div>
+      <Notes notes={figure?.notes} />
       {issue ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-sm">
           <p className="font-medium text-destructive">Needs attention</p>
@@ -235,8 +237,7 @@ export function QueueItemCard({
         </div>
       ) : missingSpoolCount > 0 ? (
         <p className="text-xs text-muted-foreground">
-          Missing {missingSpoolCount} spool reference
-          {missingSpoolCount === 1 ? "" : "s"}.
+          Missing {pluralize(missingSpoolCount, "spool reference")}.
         </p>
       ) : null}
       <div className="mt-auto flex items-center justify-between gap-2">

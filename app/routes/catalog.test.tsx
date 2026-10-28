@@ -2,7 +2,14 @@
 import "fake-indexeddb/auto"
 
 import { createRoutesStub, useLocation } from "react-router"
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import {
   afterEach,
   beforeAll,
@@ -437,20 +444,20 @@ describe("brand grouping and filtering", () => {
 
     const filter = screen.getByTestId("brand-filter")
     const chips = Array.from(filter.querySelectorAll("button"))
-    expect(chips.map((c) => c.textContent)).toEqual([
-      "Marvel",
-      "Pokemon",
-      "No brand",
-    ])
+    expect(
+      chips.map((c) => c.querySelector('[data-slot="chip-label"]')?.textContent)
+    ).toEqual(["All brands", "Marvel", "Pokemon", "No brand"])
     expect(chips.every((c) => c.getAttribute("aria-pressed") === "true")).toBe(
       true
     )
     expect(
-      chips.every(
-        (chip) =>
-          chip.classList.contains("bg-accent") &&
-          chip.classList.contains("text-accent-foreground")
-      )
+      chips
+        .slice(1)
+        .every(
+          (chip) =>
+            chip.classList.contains("bg-accent") &&
+            chip.classList.contains("text-accent-foreground")
+        )
     ).toBe(true)
   })
 
@@ -513,6 +520,57 @@ describe("brand grouping and filtering", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show all" }))
 
     expect(screen.getAllByTestId("brand-section")).toHaveLength(3)
+  })
+
+  it('"All brands" deselects every group, then selects them all again', () => {
+    seedGroupedCatalog()
+    renderCatalog()
+    const all = screen.getByTestId("brand-filter-all")
+
+    fireEvent.click(all)
+    expect(all.getAttribute("aria-pressed")).toBe("false")
+    expect(screen.queryAllByTestId("brand-section")).toHaveLength(0)
+
+    fireEvent.click(all)
+    expect(all.getAttribute("aria-pressed")).toBe("true")
+    expect(screen.getAllByTestId("brand-section")).toHaveLength(3)
+  })
+
+  it('a partial selection marks "All brands" mixed and selects all on click', () => {
+    seedGroupedCatalog()
+    renderCatalog()
+    const all = screen.getByTestId("brand-filter-all")
+
+    fireEvent.click(screen.getByTestId("brand-filter-b-marvel"))
+    expect(all.getAttribute("aria-pressed")).toBe("mixed")
+
+    fireEvent.click(all)
+    expect(screen.getAllByTestId("brand-section")).toHaveLength(3)
+  })
+
+  it("collapses many brands behind +N more, keeping deselected ones visible", () => {
+    const brands = Array.from({ length: 14 }, (_, i) =>
+      createBrand({ id: `b${i}`, name: `Brand ${String(i).padStart(2, "0")}` })
+    )
+    const figures = brands.map((brand) =>
+      createFigure({ name: `Fig ${brand.name}`, brandId: brand.id })
+    )
+    store.setState({
+      brands: new Map(brands.map((b) => [b.id, b])),
+      figures: new Map(figures.map((f) => [f.id, f])),
+    })
+    renderCatalog()
+
+    const more = screen.getByTestId("brand-filter-more")
+    expect(more.textContent).toBe("+4 more")
+    expect(screen.queryByTestId("brand-filter-b13")).toBeNull()
+
+    fireEvent.click(more)
+    fireEvent.click(screen.getByTestId("brand-filter-b13"))
+    fireEvent.click(screen.getByTestId("brand-filter-more"))
+
+    expect(screen.getByTestId("brand-filter-b13")).toBeTruthy()
+    expect(screen.getByTestId("brand-filter-more").textContent).toBe("+3 more")
   })
 
   it("an import (full data replace) resets the filter to all-visible", () => {
@@ -733,9 +791,11 @@ describe("brand manager from the catalog", () => {
     closeModal()
 
     expect(sectionHeadings()).toEqual(["Marvel Comics", "No brand"])
-    expect(screen.getByTestId("brand-filter-b-marvel").textContent).toBe(
-      "Marvel Comics"
-    )
+    expect(
+      screen
+        .getByTestId("brand-filter-b-marvel")
+        .querySelector('[data-slot="chip-label"]')?.textContent
+    ).toBe("Marvel Comics")
     expect(
       screen.getByTestId("brand-filter-b-pokemon").getAttribute("aria-pressed")
     ).toBe("false")
@@ -858,9 +918,25 @@ describe("brand manager from the catalog", () => {
   })
 })
 
-describe("catalog order mode", () => {
-  function beginNewOrder() {
-    fireEvent.click(screen.getByTestId("order-mode-toggle"))
+describe("catalog queue batch", () => {
+  function bar() {
+    return screen.getByTestId("queue-batch-bar")
+  }
+
+  function summary() {
+    return screen.getByTestId("queue-batch-summary").textContent
+  }
+
+  function chooseDestination(label: string) {
+    const select = screen.getByLabelText("Queue for") as HTMLSelectElement
+    const option = Array.from(select.options).find((o) =>
+      o.textContent?.startsWith(label)
+    )
+    fireEvent.change(select, { target: { value: option!.value } })
+  }
+
+  function createOrderFromBar() {
+    fireEvent.click(within(bar()).getByRole("button", { name: "New order" }))
     fireEvent.click(screen.getByRole("button", { name: "Create order" }))
   }
 
@@ -891,66 +967,56 @@ describe("catalog order mode", () => {
     })
   }
 
-  it("the toggle opens order mode with a summary bar defaulting to order", () => {
+  it("the bar appears once a figure is added and defaults to stock", () => {
     seedCatalog()
     renderCatalog()
 
-    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
-    beginNewOrder()
+    expect(screen.queryByTestId("queue-batch-bar")).toBeNull()
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
 
-    const bar = screen.getByTestId("order-summary-bar")
-    expect(bar.textContent).toContain("0 figures · 0 pieces")
-    expect(bar.textContent).toContain("ORD-001")
-    const confirm = screen.getByRole("button", {
-      name: "Confirm",
-    }) as HTMLButtonElement
-    expect(confirm.disabled).toBe(true)
+    expect(summary()).toBe("1 figure · 1 piece")
+    expect(
+      (screen.getByLabelText("Queue for") as HTMLSelectElement).value
+    ).toBe("stock")
+    expect(screen.getByRole("button", { name: "Add to stock" })).toBeTruthy()
   })
 
-  it("selecting cards and adjusting quantities updates the summary", () => {
+  it("adding and adjusting quantities updates the summary", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
 
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByLabelText("Add Woody to order"))
-    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody"))
+    fireEvent.click(screen.getByLabelText("Increase quantity of Buzz"))
+    expect(summary()).toBe("2 figures · 3 pieces")
 
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "2 figures · 3 pieces"
-    )
-
-    // − at 1 deselects the figure
-    fireEvent.click(screen.getByLabelText("Decrease order quantity of Woody"))
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "1 figure · 2 pieces"
-    )
+    // − at 1 unstages the figure
+    fireEvent.click(screen.getByLabelText("Decrease quantity of Woody"))
+    expect(summary()).toBe("1 figure · 2 pieces")
   })
 
-  it("figures with no required colors stay unselectable", () => {
+  it("figures with no required colors offer no add control", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
 
-    const add = screen.getByLabelText("Add Empty to order") as HTMLButtonElement
-    expect(add.disabled).toBe(true)
+    expect(screen.queryByLabelText("Add Empty")).toBeNull()
+    expect(screen.getByText("Assign colors to queue this figure")).toBeTruthy()
   })
 
-  it("confirm queues the whole batch in one store update and exits order mode", () => {
+  it("adds the whole batch to stock in one store update and resets", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
 
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
-    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    fireEvent.click(screen.getByLabelText("Increase quantity of Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody"))
 
     let notifications = 0
     const unsubscribe = store.subscribe(() => {
       notifications += 1
     })
     try {
-      fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+      fireEvent.click(screen.getByRole("button", { name: "Add to stock" }))
       expect(notifications).toBe(1)
     } finally {
       unsubscribe()
@@ -958,28 +1024,64 @@ describe("catalog order mode", () => {
 
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(2)
-    expect(items.every((qi) => qi.orderId !== null)).toBe(true)
+    expect(items.every((qi) => qi.orderId === null)).toBe(true)
     expect(items.find((qi) => qi.figureId === "fig-buzz")?.quantity).toBe(2)
     expect(items.find((qi) => qi.figureId === "fig-woody")?.quantity).toBe(1)
-
-    // order mode exited, selection cleared
-    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
-    beginNewOrder()
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "0 figures · 0 pieces"
-    )
+    expect(screen.queryByTestId("queue-batch-bar")).toBeNull()
   })
 
-  it("links a confirmed batch to the created order", () => {
+  it("creating a new order from the bar targets the batch at it", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    createOrderFromBar()
+
+    // the staged batch survives the order form
+    expect(summary()).toBe("1 figure · 1 piece")
+    fireEvent.click(screen.getByRole("button", { name: "Add to ORD-001" }))
 
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(1)
     expect(items[0].orderId).toBe([...store.getState().orders.keys()][0])
+  })
+
+  it("the header New order button opens an empty batch for that order", () => {
+    seedCatalog()
+    renderCatalog()
+    fireEvent.click(screen.getByRole("button", { name: "New order" }))
+    fireEvent.click(screen.getByRole("button", { name: "Create order" }))
+
+    expect(summary()).toBe("Add figures to queue them")
+    const confirm = screen.getByRole("button", {
+      name: "Add to ORD-001",
+    }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+  })
+
+  it("an existing open order can be picked as the destination", () => {
+    seedCatalog()
+    const order = createOrder({ reference: "ORD-042", customerName: "Ana" })
+    store.setState({ orders: new Map([[order.id, order]]) })
+    renderCatalog()
+
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    chooseDestination("ORD-042 · Ana")
+    fireEvent.click(screen.getByRole("button", { name: "Add to ORD-042" }))
+
+    const items = [...store.getState().queueItems.values()]
+    expect(items[0].orderId).toBe(order.id)
+  })
+
+  it("an order deep link preselects that order", () => {
+    seedCatalog()
+    const order = createOrder({ reference: "ORD-042" })
+    store.setState({ orders: new Map([[order.id, order]]) })
+    renderCatalog(`/catalog?order=${order.id}`)
+
+    expect(bar().textContent).toContain("Add figures to queue them")
+    expect(
+      (screen.getByLabelText("Queue for") as HTMLSelectElement).value
+    ).toBe(order.id)
   })
 
   it("does not reopen a Ready historical order from a direct catalog link", () => {
@@ -1002,30 +1104,30 @@ describe("catalog order mode", () => {
 
     renderCatalog(`/catalog?order=${order.id}`)
 
-    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
-    expect(screen.getByTestId("order-mode-toggle").textContent).toContain(
-      "Add order"
+    expect(screen.queryByTestId("queue-batch-bar")).toBeNull()
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    const select = screen.getByLabelText("Queue for") as HTMLSelectElement
+    expect(select.value).toBe("stock")
+    expect(Array.from(select.options).some((o) => o.value === order.id)).toBe(
+      false
     )
   })
 
-  it("cancel exits order mode and clears the selection", () => {
+  it("clear drops the batch and the destination without queueing", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    createOrderFromBar()
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }))
 
-    expect(screen.queryByTestId("order-summary-bar")).toBeNull()
+    expect(screen.queryByTestId("queue-batch-bar")).toBeNull()
     expect(store.getState().queueItems.size).toBe(0)
-
-    beginNewOrder()
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "0 figures · 0 pieces"
-    )
+    fireEvent.click(screen.getByLabelText("Add Woody"))
+    expect(screen.getByRole("button", { name: "Add to stock" })).toBeTruthy()
   })
 
-  it("bulk-add merges into an existing active entry per CAP-6", () => {
+  it("merges into an existing active entry per CAP-6", () => {
     seedCatalog()
     const order = createOrder({ reference: "ORD-042" })
     const existing = createQueueItem({
@@ -1040,71 +1142,48 @@ describe("catalog order mode", () => {
     })
 
     renderCatalog(`/catalog?order=${order.id}`)
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    fireEvent.click(screen.getByLabelText("Increase quantity of Buzz"))
+    fireEvent.click(screen.getByRole("button", { name: "Add to ORD-042" }))
 
     expect(store.getState().queueItems.size).toBe(1)
     expect(store.getState().queueItems.get("q-existing")?.quantity).toBe(3)
   })
 
-  it("tapping a card selects it at ×1; tapping a selected card leaves its quantity alone", () => {
+  it("the + button is disabled at 99", () => {
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-
-    const buzzCard = screen
-      .getByText("Buzz")
-      .closest('[data-testid="figure-card"]')!
-    fireEvent.click(buzzCard)
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "1 figure · 1 piece"
-    )
-
-    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
-    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×2")
-
-    // the !selected guard: a second card tap must not change the quantity
-    fireEvent.click(buzzCard)
-    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×2")
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "1 figure · 2 pieces"
-    )
-  })
-
-  it("the order-mode + button is disabled at 99", () => {
-    seedCatalog()
-    renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
 
     const plus = screen.getByLabelText(
-      "Increase order quantity of Buzz"
+      "Increase quantity of Buzz"
     ) as HTMLButtonElement
     for (let i = 0; i < 98; i++) {
       fireEvent.click(plus)
     }
 
-    expect(screen.getByTestId("order-quantity-value").textContent).toBe("×99")
+    expect(screen.getByTestId("figure-quantity-value").textContent).toBe("×99")
     expect(plus.disabled).toBe(true)
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "1 figure · 99 pieces"
-    )
+    expect(summary()).toBe("1 figure · 99 pieces")
   })
 
-  it("confirm presents the piece total as a success toast", async () => {
+  it("confirm presents the piece total and destination as a success toast", async () => {
     const { toast } = await import("sonner")
     const successSpy = vi.spyOn(toast, "success")
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByLabelText("Increase order quantity of Buzz"))
-    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    fireEvent.click(screen.getByLabelText("Increase quantity of Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody"))
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to stock" }))
 
-    expect(successSpy).toHaveBeenCalledWith("3 pieces queued")
+    expect(successSpy).toHaveBeenCalledWith(
+      "3 pieces queued as stock",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "View" }),
+      })
+    )
     successSpy.mockRestore()
   })
 
@@ -1113,22 +1192,22 @@ describe("catalog order mode", () => {
     const successSpy = vi.spyOn(toast, "success")
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
-    fireEvent.click(screen.getByLabelText("Add Woody to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
+    fireEvent.click(screen.getByLabelText("Add Woody"))
 
     act(() => {
       store.getState().deleteFigure("fig-woody")
     })
 
     // the summary stops counting the phantom before confirm
-    expect(screen.getByTestId("order-summary-bar").textContent).toContain(
-      "1 figure · 1 piece"
+    expect(summary()).toBe("1 figure · 1 piece")
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to stock" }))
+
+    expect(successSpy).toHaveBeenCalledWith(
+      "1 piece queued as stock · 1 figure skipped",
+      expect.anything()
     )
-
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
-
-    expect(successSpy).toHaveBeenCalledWith("1 piece queued · 1 figure skipped")
     const items = [...store.getState().queueItems.values()]
     expect(items).toHaveLength(1)
     expect(items[0].figureId).toBe("fig-buzz")
@@ -1141,8 +1220,7 @@ describe("catalog order mode", () => {
     const warningSpy = vi.spyOn(toast, "warning")
     seedCatalog()
     renderCatalog()
-    beginNewOrder()
-    fireEvent.click(screen.getByLabelText("Add Buzz to order"))
+    fireEvent.click(screen.getByLabelText("Add Buzz"))
 
     // the figure still exists but loses its colors after staging — the store
     // skips it, so nothing lands
@@ -1150,7 +1228,7 @@ describe("catalog order mode", () => {
       store.getState().updateFigure("fig-buzz", { requiredColors: [] })
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to stock" }))
 
     expect(successSpy).not.toHaveBeenCalled()
     expect(warningSpy).toHaveBeenCalledWith("Nothing queued · 1 figure skipped")

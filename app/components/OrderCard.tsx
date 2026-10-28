@@ -12,7 +12,7 @@ import {
 } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Order } from "~/lib/types"
-import { cn } from "~/lib/utils"
+import { cn, pluralize } from "~/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,7 +111,7 @@ export function OrderCard({ order, today }: { order: Order; today: string }) {
                 <AlertDialogDescription>
                   {rows.length === 0
                     ? "This Draft has no linked queue lines."
-                    : `This also removes ${rows.length} linked line${rows.length === 1 ? "" : "s"} from the queue. Completed history for other orders is unchanged.`}
+                    : `This also removes ${pluralize(rows.length, "linked line")} from the queue. Completed history for other orders is unchanged.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

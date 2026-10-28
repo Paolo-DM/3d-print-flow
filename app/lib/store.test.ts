@@ -107,6 +107,50 @@ describe("store mutations", () => {
     expect(store.getState().spools.size).toBe(0)
   })
 
+  it("deleteSpool with a replacement remaps figures and carries printed counts", () => {
+    const green = createSpool({ id: "green" })
+    const olive = createSpool({ id: "olive" })
+    const red = createSpool({ id: "red" })
+    const swap = createFigure({ id: "swap", requiredColors: ["green", "red"] })
+    const both = createFigure({
+      id: "both",
+      requiredColors: ["olive", "green"],
+    })
+    const swapItem = createQueueItem({
+      id: "q1",
+      figureId: "swap",
+      quantity: 2,
+      completedCounts: { green: 2, red: 2 },
+      completedAt: null,
+    })
+    const bothItem = createQueueItem({
+      id: "q2",
+      figureId: "both",
+      quantity: 2,
+      completedCounts: { green: 2, olive: 1 },
+      completedAt: null,
+    })
+    store.setState({
+      spools: new Map([green, olive, red].map((s) => [s.id, s])),
+      figures: new Map([swap, both].map((f) => [f.id, f])),
+      queueItems: new Map([swapItem, bothItem].map((q) => [q.id, q])),
+    })
+
+    store.getState().deleteSpool("green", "olive")
+
+    const state = store.getState()
+    expect(state.spools.has("green")).toBe(false)
+    expect(state.figures.get("swap")?.requiredColors).toEqual(["olive", "red"])
+    expect(state.figures.get("both")?.requiredColors).toEqual(["olive"])
+    expect(state.queueItems.get("q1")?.completedCounts).toEqual({
+      olive: 2,
+      red: 2,
+    })
+    expect(state.queueItems.get("q1")?.completedAt).not.toBeNull()
+    expect(state.queueItems.get("q2")?.completedCounts).toEqual({ olive: 1 })
+    expect(state.queueItems.get("q2")?.completedAt).toBeNull()
+  })
+
   it("createFigure adds a figure with UUID and correct data", () => {
     store.getState().createFigure({
       name: "Naruto",
@@ -909,169 +953,6 @@ describe("queue mutations", () => {
     return figure
   }
 
-  describe("addToQueue", () => {
-    it("creates a QueueItem with quantity 1, empty counts, and UUID", () => {
-      seedFigure("fig-1")
-      const result = store.getState().addToQueue("fig-1", null)
-      expect(result).toEqual({ type: "created" })
-      const items = store.getState().queueItems
-      expect(items.size).toBe(1)
-      const item = [...items.values()][0]
-      expect(item.id).toBeTruthy()
-      expect(item.figureId).toBe("fig-1")
-      expect(item.orderId).toBeNull()
-      expect(item.quantity).toBe(1)
-      expect(item.completedCounts).toEqual({})
-      expect(item.completedAt).toBeNull()
-    })
-
-    it("accepts an explicit quantity on create, clamped to 99", () => {
-      seedFigure("fig-1")
-      store.getState().addToQueue("fig-1", orderTarget(), 15)
-      expect([...store.getState().queueItems.values()][0].quantity).toBe(15)
-
-      store.setState({ queueItems: new Map() })
-      store.getState().addToQueue("fig-1", orderTarget(), 250)
-      expect([...store.getState().queueItems.values()][0].quantity).toBe(99)
-    })
-
-    it("rejects a missing figure and a figure with no required colors", () => {
-      seedFigure("fig-colorless", [])
-      expect(store.getState().addToQueue("missing", null)).toEqual({
-        type: "rejected",
-      })
-      expect(store.getState().addToQueue("fig-colorless", null)).toEqual({
-        type: "rejected",
-      })
-      expect(store.getState().queueItems.size).toBe(0)
-    })
-
-    it("rejects non-integer or non-finite quantity without mutating", () => {
-      seedFigure("fig-1")
-      for (const quantity of [1.5, NaN, Infinity, -Infinity]) {
-        expect(store.getState().addToQueue("fig-1", null, quantity)).toEqual({
-          type: "invalid",
-        })
-      }
-      expect(store.getState().queueItems.size).toBe(0)
-    })
-
-    it("merges into an active same-figure+type entry, counts untouched", () => {
-      seedFigure("fig-1", ["s1", "s2"])
-      const existing = createQueueItem({
-        id: "q1",
-        figureId: "fig-1",
-        orderId: orderTarget(),
-        quantity: 2,
-        completedCounts: { s1: 1 },
-      })
-      store.setState({ queueItems: new Map([["q1", existing]]) })
-
-      const result = store.getState().addToQueue("fig-1", orderTarget())
-
-      expect(result).toEqual({ type: "merged", quantity: 3, clamped: false })
-      expect(store.getState().queueItems.size).toBe(1)
-      const merged = store.getState().queueItems.get("q1")!
-      expect(merged.quantity).toBe(3)
-      expect(merged.completedCounts).toEqual({ s1: 1 })
-      expect(merged.completedAt).toBeNull()
-    })
-
-    it("creates a new row for a different type (stock vs order stay separate)", () => {
-      seedFigure("fig-1")
-      const existing = createQueueItem({
-        id: "q1",
-        figureId: "fig-1",
-        orderId: null,
-      })
-      store.setState({ queueItems: new Map([["q1", existing]]) })
-
-      expect(store.getState().addToQueue("fig-1", orderTarget())).toEqual({
-        type: "created",
-      })
-      expect(store.getState().queueItems.size).toBe(2)
-    })
-
-    it("rejects adding new work to a Ready historical order", () => {
-      const figure = seedFigure("fig-1", ["s1"])
-      const spool = createSpool({ id: "s1" })
-      const order = createOrder({ id: TEST_ORDER_ID })
-      const completed = createQueueItem({
-        id: "completed",
-        figureId: figure.id,
-        orderId: order.id,
-        completedCounts: { [spool.id]: 1 },
-        completedAt: "2026-08-30T10:00:00.000Z",
-      })
-      store.setState({
-        spools: new Map([[spool.id, spool]]),
-        orders: new Map([[order.id, order]]),
-        queueItems: new Map([[completed.id, completed]]),
-      })
-
-      expect(store.getState().addToQueue(figure.id, order.id)).toEqual({
-        type: "rejected",
-      })
-      expect(store.getState().queueItems).toEqual(
-        new Map([[completed.id, completed]])
-      )
-    })
-
-    it("never merges into a completed-by-derivation entry", () => {
-      seedFigure("fig-1", ["s1"])
-      const completed = createQueueItem({
-        id: "q1",
-        figureId: "fig-1",
-        orderId: null,
-        quantity: 1,
-        completedCounts: { s1: 1 },
-        completedAt: "2026-08-01T10:00:00.000Z",
-      })
-      store.setState({ queueItems: new Map([["q1", completed]]) })
-
-      expect(store.getState().addToQueue("fig-1", null)).toEqual({
-        type: "created",
-      })
-      expect(store.getState().queueItems.size).toBe(2)
-      expect(store.getState().queueItems.get("q1")).toEqual(completed)
-    })
-
-    it("with several active candidates the smallest id receives the merge", () => {
-      seedFigure("fig-1", ["s1"])
-      const a = createQueueItem({ id: "qa", figureId: "fig-1" })
-      const b = createQueueItem({ id: "qb", figureId: "fig-1" })
-      store.setState({
-        queueItems: new Map([
-          ["qb", b],
-          ["qa", a],
-        ]),
-      })
-
-      store.getState().addToQueue("fig-1", null)
-
-      expect(store.getState().queueItems.get("qa")?.quantity).toBe(2)
-      expect(store.getState().queueItems.get("qb")?.quantity).toBe(1)
-    })
-
-    it("clamps a merge at 99 and reports it: 98 + 2 -> 99 clamped", () => {
-      seedFigure("fig-1", ["s1"])
-      const existing = createQueueItem({
-        id: "q1",
-        figureId: "fig-1",
-        orderId: null,
-        quantity: 98,
-      })
-      store.setState({ queueItems: new Map([["q1", existing]]) })
-
-      expect(store.getState().addToQueue("fig-1", null, 2)).toEqual({
-        type: "merged",
-        quantity: 99,
-        clamped: true,
-      })
-      expect(store.getState().queueItems.get("q1")?.quantity).toBe(99)
-    })
-  })
-
   describe("removeFromQueue", () => {
     it("removes the correct item", () => {
       const q1 = createQueueItem({ id: "q1", figureId: "fig-1" })
@@ -1093,6 +974,75 @@ describe("queue mutations", () => {
       store.setState({ queueItems: new Map([["q1", q1]]) })
       const before = store.getState().queueItems
       store.getState().removeFromQueue("nonexistent")
+      expect(store.getState().queueItems).toBe(before)
+    })
+  })
+
+  describe("clearQueue", () => {
+    function seedMixedQueue() {
+      const spool = createSpool({ id: "s1" })
+      const figure = createFigure({ id: "fig", requiredColors: ["s1"] })
+      const active = createOrder({ id: "o-active", reference: "ORD-001" })
+      const ready = createOrder({ id: "o-ready", reference: "ORD-002" })
+      const rows = [
+        createQueueItem({ id: "stock-open", figureId: "fig" }),
+        createQueueItem({
+          id: "stock-done",
+          figureId: "fig",
+          completedCounts: { s1: 1 },
+        }),
+        createQueueItem({
+          id: "active-open",
+          figureId: "fig",
+          orderId: "o-active",
+        }),
+        createQueueItem({
+          id: "active-finished",
+          figureId: "fig",
+          orderId: "o-active",
+          completedCounts: { s1: 1 },
+        }),
+        createQueueItem({
+          id: "ready-line",
+          figureId: "fig",
+          orderId: "o-ready",
+          completedCounts: { s1: 1 },
+        }),
+      ]
+      store.setState({
+        spools: new Map([["s1", spool]]),
+        figures: new Map([["fig", figure]]),
+        orders: new Map([
+          [active.id, active],
+          [ready.id, ready],
+        ]),
+        queueItems: new Map(rows.map((row) => [row.id, row])),
+      })
+    }
+
+    it("removes every Queue line but keeps Completed history and orders", () => {
+      seedMixedQueue()
+      expect(store.getState().clearQueue({ kind: "all" })).toBe(3)
+      expect([...store.getState().queueItems.keys()].sort()).toEqual([
+        "ready-line",
+        "stock-done",
+      ])
+      expect(store.getState().orders.size).toBe(2)
+    })
+
+    it("only touches lines inside the given scope", () => {
+      seedMixedQueue()
+      expect(store.getState().clearQueue({ kind: "stock" })).toBe(1)
+      expect(store.getState().queueItems.has("stock-open")).toBe(false)
+      expect(store.getState().queueItems.has("active-open")).toBe(true)
+    })
+
+    it("is a no-op when nothing is queued in scope", () => {
+      seedMixedQueue()
+      const before = store.getState().queueItems
+      expect(
+        store.getState().clearQueue({ kind: "order", orderId: "o-ready" })
+      ).toBe(0)
       expect(store.getState().queueItems).toBe(before)
     })
   })

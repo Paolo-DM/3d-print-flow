@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
+import { NativeSelect } from "~/components/ui/native-select"
 import {
   Drawer,
   DrawerContent,
@@ -51,12 +52,18 @@ export default function SpoolLibrary() {
   const [open, setOpen] = useState(false)
   const [editingSpool, setEditingSpool] = useState<Spool | null>(null)
   const [deletingSpool, setDeletingSpool] = useState<Spool | null>(null)
+  const [replacementId, setReplacementId] = useState("")
 
   const title = editingSpool ? "Edit Spool" : "Add Spool"
 
   const referencingFigures = deletingSpool
     ? getReferencingFigures(deletingSpool.id, figures)
     : []
+  const replacementOptions = spoolList.filter(
+    (spool) => spool.id !== deletingSpool?.id
+  )
+  const canReplace =
+    referencingFigures.length > 0 && replacementOptions.length > 0
 
   function handleAddSpool() {
     setEditingSpool(null)
@@ -81,11 +88,12 @@ export default function SpoolLibrary() {
 
   function handleDeleteSpool(spool: Spool) {
     setDeletingSpool(spool)
+    setReplacementId("")
   }
 
   function handleConfirmDelete() {
     if (deletingSpool) {
-      deleteSpool(deletingSpool.id)
+      deleteSpool(deletingSpool.id, replacementId || undefined)
       setDeletingSpool(null)
     }
   }
@@ -163,7 +171,11 @@ export default function SpoolLibrary() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {referencingFigures.length > 0 ? "Cannot Delete" : "Delete Spool"}
+              {canReplace
+                ? "Replace Spool"
+                : referencingFigures.length > 0
+                  ? "Cannot Delete"
+                  : "Delete Spool"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {referencingFigures.length > 0
@@ -178,16 +190,37 @@ export default function SpoolLibrary() {
               ))}
             </ul>
           ) : null}
+          {canReplace ? (
+            <label className="grid gap-1.5 text-sm font-medium">
+              Replace with
+              <NativeSelect
+                value={replacementId}
+                onChange={(event) => setReplacementId(event.target.value)}
+              >
+                <option value="" disabled>
+                  Choose a spool…
+                </option>
+                {replacementOptions.map((spool) => (
+                  <option key={spool.id} value={spool.id}>
+                    {spool.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>
-              {referencingFigures.length > 0 ? "Close" : "Cancel"}
+              {referencingFigures.length > 0 && !canReplace
+                ? "Close"
+                : "Cancel"}
             </AlertDialogCancel>
-            {referencingFigures.length === 0 ? (
+            {referencingFigures.length === 0 || canReplace ? (
               <AlertDialogAction
                 variant="destructive"
+                disabled={canReplace && replacementId === ""}
                 onClick={handleConfirmDelete}
               >
-                Delete
+                {canReplace ? "Replace & Delete" : "Delete"}
               </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>

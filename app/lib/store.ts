@@ -3,7 +3,13 @@ import { toast } from "sonner"
 
 import * as db from "~/lib/db"
 import { isValidLocalDate } from "~/lib/date"
-import { computeCompletionStatus, deriveOrderState } from "~/lib/derived"
+import {
+  computeCompletionStatus,
+  deriveOrderState,
+  getQueueLines,
+  isOpenOrder,
+  type QueueScope,
+} from "~/lib/derived"
 import { brandKey, orderReferenceKey } from "~/lib/migration"
 import type { Brand, Figure, Order, QueueItem, Spool } from "~/lib/types"
 
@@ -17,12 +23,6 @@ export type RenameBrandResult =
 export type DeleteBrandResult =
   | { type: "deleted"; detachedFigureCount: number }
   | { type: "not-found" }
-
-export type AddToQueueResult =
-  | { type: "created" }
-  | { type: "merged"; quantity: number; clamped: boolean }
-  | { type: "rejected" }
-  | { type: "invalid" }
 
 export type SetQuantityResult =
   | { type: "updated"; completed: boolean }
@@ -81,6 +81,45 @@ function deriveCompletedAt(
   return computeCompletionStatus(item, figure)
     ? (item.completedAt ?? new Date().toISOString())
     : null
+}
+
+/**
+ * Points every figure using `fromId` at `toId`, carrying printed counts over.
+ * A figure that already needs `toId` just drops `fromId` and keeps its own count.
+ */
+function remapSpool(
+  state: Pick<PrintFlowState, "figures" | "queueItems">,
+  fromId: string,
+  toId: string
+): Pick<PrintFlowState, "figures" | "queueItems"> {
+  const figures = new Map(state.figures)
+  for (const figure of state.figures.values()) {
+    if (!figure.requiredColors.includes(fromId)) continue
+    const requiredColors = figure.requiredColors.includes(toId)
+      ? figure.requiredColors.filter((spoolId) => spoolId !== fromId)
+      : figure.requiredColors.map((spoolId) =>
+          spoolId === fromId ? toId : spoolId
+        )
+    figures.set(figure.id, { ...figure, requiredColors })
+  }
+  const queueItems = new Map(state.queueItems)
+  for (const item of state.queueItems.values()) {
+    const before = state.figures.get(item.figureId)
+    const after = figures.get(item.figureId)
+    if (!before || before === after) continue
+    const { [fromId]: moved = 0, ...rest } = item.completedCounts
+    const next = {
+      ...item,
+      completedCounts: before.requiredColors.includes(toId)
+        ? rest
+        : { ...rest, [toId]: moved },
+    }
+    queueItems.set(item.id, {
+      ...next,
+      completedAt: deriveCompletedAt(next, after),
+    })
+  }
+  return { figures, queueItems }
 }
 
 function findMergeTarget(
@@ -185,7 +224,8 @@ interface PrintFlowState {
   renameBrand: (id: string, name: string) => RenameBrandResult
   deleteBrand: (id: string) => DeleteBrandResult
   updateSpool: (id: string, updates: Partial<Omit<Spool, "id">>) => void
-  deleteSpool: (id: string) => void
+  /** With a replacement, figures using the spool switch to it first. */
+  deleteSpool: (id: string, replacementId?: string) => void
   createFigure: (data: Omit<Figure, "id">) => void
   updateFigure: (id: string, updates: Partial<Omit<Figure, "id">>) => void
   deleteFigure: (id: string) => void
@@ -193,17 +233,14 @@ interface PrintFlowState {
   updateOrder: (id: string, draft: OrderDraft) => SaveOrderResult
   deleteOrder: (id: string) => DeleteOrderResult
   duplicateOrder: (id: string) => DuplicateOrderResult
-  addToQueue: (
-    figureId: string,
-    orderId: string | null,
-    quantity?: number
-  ) => AddToQueueResult
   addBatchToQueue: (
     entries: { figureId: string; quantity: number }[],
     orderId: string | null
   ) => AddBatchResult
   setQuantity: (queueItemId: string, quantity: number) => SetQuantityResult
   removeFromQueue: (id: string) => void
+  /** Removes every Queue line in scope; Orders and Completed are untouched. */
+  clearQueue: (scope: QueueScope) => number
   toggleChip: (queueItemId: string, spoolId: string) => void
   requeueCompleted: (queueItemId: string) => RequeueResult
 }
@@ -290,15 +327,22 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     })
   },
 
-  deleteSpool(id) {
+  deleteSpool(id, replacementId) {
     set((state) => {
       if (!state.spools.has(id)) return state
       const spools = new Map(state.spools)
       spools.delete(id)
+      // Remapped figures no longer need `id`, so nothing below breaks.
+      const { figures, queueItems } =
+        replacementId !== undefined &&
+        replacementId !== id &&
+        state.spools.has(replacementId)
+          ? remapSpool(state, id, replacementId)
+          : state
       const affectedReferences = new Set<string>()
-      for (const row of state.queueItems.values()) {
+      for (const row of queueItems.values()) {
         if (row.orderId === null) continue
-        const figure = state.figures.get(row.figureId)
+        const figure = figures.get(row.figureId)
         if (figure?.requiredColors.includes(id)) {
           const reference = state.orders.get(row.orderId)?.reference
           if (reference) affectedReferences.add(reference)
@@ -306,6 +350,8 @@ export const store = createStore<PrintFlowState>((set, get) => ({
       }
       return {
         spools,
+        figures,
+        queueItems,
         announcement:
           affectedReferences.size > 0
             ? `${[...affectedReferences].join(", ")} moved to Needs attention after a spool was deleted.`
@@ -510,54 +556,6 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     return { type: "duplicated", order, lines }
   },
 
-  addToQueue(figureId, orderId, quantity = 1) {
-    const normalizedQuantity = normalizeQuantity(quantity)
-    if (normalizedQuantity === null) return { type: "invalid" }
-    const { figures, orders, queueItems, spools } = get()
-    const figure = figures.get(figureId)
-    if (!figure || figure.requiredColors.length === 0) {
-      return { type: "rejected" }
-    }
-    if (orderId !== null) {
-      if (
-        !orders.has(orderId) ||
-        deriveOrderState(orderId, queueItems, figures, spools) === "ready"
-      ) {
-        return { type: "rejected" }
-      }
-    }
-
-    const nextQueue = new Map(queueItems)
-    const mergeTarget = findMergeTarget(queueItems, figures, figureId, orderId)
-    if (mergeTarget) {
-      const requested = mergeTarget.quantity + normalizedQuantity
-      const mergedQuantity = Math.min(requested, MAX_QUEUE_QUANTITY)
-      const updated = { ...mergeTarget, quantity: mergedQuantity }
-      nextQueue.set(mergeTarget.id, {
-        ...updated,
-        completedAt: deriveCompletedAt(updated, figure),
-      })
-      set({ queueItems: nextQueue })
-      return {
-        type: "merged",
-        quantity: mergedQuantity,
-        clamped: requested > MAX_QUEUE_QUANTITY,
-      }
-    }
-
-    const queueItemId = crypto.randomUUID()
-    nextQueue.set(queueItemId, {
-      id: queueItemId,
-      figureId,
-      orderId,
-      quantity: normalizedQuantity,
-      completedCounts: {},
-      completedAt: null,
-    })
-    set({ queueItems: nextQueue })
-    return { type: "created" }
-  },
-
   addBatchToQueue(entries, orderId) {
     if (entries.length === 0) return { type: "empty" }
     const summed = new Map<string, number>()
@@ -569,10 +567,7 @@ export const store = createStore<PrintFlowState>((set, get) => ({
     }
     const { figures, orders, queueItems, spools } = get()
     if (orderId !== null) {
-      if (
-        !orders.has(orderId) ||
-        deriveOrderState(orderId, queueItems, figures, spools) === "ready"
-      ) {
+      if (!isOpenOrder(orderId, orders, queueItems, figures, spools)) {
         return {
           type: "queued",
           pieces: 0,
@@ -661,6 +656,16 @@ export const store = createStore<PrintFlowState>((set, get) => ({
       queueItems.delete(id)
       return { queueItems }
     })
+  },
+
+  clearQueue(scope) {
+    const { figures, queueItems, spools } = get()
+    const lines = getQueueLines(queueItems, figures, spools, scope)
+    if (lines.length === 0) return 0
+    const next = new Map(queueItems)
+    for (const line of lines) next.delete(line.id)
+    set({ queueItems: next })
+    return lines.length
   },
 
   toggleChip(queueItemId, spoolId) {

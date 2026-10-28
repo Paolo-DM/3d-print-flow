@@ -17,7 +17,7 @@ import {
 } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Order, Spool } from "~/lib/types"
-import { cn } from "~/lib/utils"
+import { cn, pluralize } from "~/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -185,7 +185,7 @@ function ReadyOrder({ order }: { order: Order }) {
       return
     }
     toast.success(
-      `${result.order.reference} created with ${result.lines} zero-progress line${result.lines === 1 ? "" : "s"}.`
+      `${result.order.reference} created with ${pluralize(result.lines, "zero-progress line")}.`
     )
   }
 
@@ -198,7 +198,7 @@ function ReadyOrder({ order }: { order: Order }) {
         <div>
           <OrderIdentity order={order} />
           <p className="mt-1 text-xs text-muted-foreground">
-            Ready · {rows.length} line{rows.length === 1 ? "" : "s"}
+            Ready · {pluralize(rows.length, "line")}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={duplicate}>

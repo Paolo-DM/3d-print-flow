@@ -1,18 +1,24 @@
 import { useState } from "react"
-import { useSearchParams } from "react-router"
-import { Check, Shapes } from "lucide-react"
+import { useNavigate, useSearchParams } from "react-router"
+import { Shapes } from "lucide-react"
 import { toast } from "sonner"
 
 import { MAX_QUEUE_QUANTITY, usePrintFlowStore } from "~/lib/store"
-import { computeAffectedQueueItems, deriveOrderState } from "~/lib/derived"
-import type { Brand, Figure, Order, Spool } from "~/lib/types"
-import { cn } from "~/lib/utils"
+import {
+  computeAffectedQueueItems,
+  isOpenOrder,
+  sortOrders,
+} from "~/lib/derived"
+import type { Figure, Order } from "~/lib/types"
+import { pluralize } from "~/lib/utils"
 import { useIsMobile } from "~/hooks/use-mobile"
+import { useToday } from "~/hooks/use-today"
+import { BrandGroupedCatalog } from "~/components/BrandGroupedCatalog"
 import { BrandManager } from "~/components/BrandManager"
-import { FigureCard } from "~/components/FigureCard"
+import { FigureCard, FigureQuantityControl } from "~/components/FigureCard"
 import { FigureForm } from "~/components/FigureForm"
 import { OrderForm } from "~/components/OrderForm"
-import { OrderIdentity } from "~/components/OrderIdentity"
+import { QueueBatchBar } from "~/components/QueueBatchBar"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,9 +53,6 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet"
 
-/** Filter/group id for figures without a resolvable brand. */
-const NO_BRAND = "no-brand"
-
 /**
  * The catalog owns exactly one modal shell, so the figure form and the brand
  * manager can never be open at the same time (CAP-7).
@@ -59,178 +62,10 @@ type CatalogModal =
   | { kind: "brands" }
   | { kind: "order" }
 
-interface BrandGroup {
-  id: string
-  name: string
-  figures: Figure[]
-}
-
-function groupFiguresByBrand(
-  figures: Figure[],
-  brands: Map<string, Brand>
-): BrandGroup[] {
-  const byBrandId = new Map<string, Figure[]>()
-  for (const figure of figures) {
-    // An unresolvable brandId groups under "No brand" (orphan tolerance)
-    const groupId =
-      figure.brandId !== null && brands.has(figure.brandId)
-        ? figure.brandId
-        : NO_BRAND
-    const group = byBrandId.get(groupId)
-    if (group) {
-      group.push(figure)
-    } else {
-      byBrandId.set(groupId, [figure])
-    }
-  }
-
-  const brandGroups: BrandGroup[] = []
-  for (const [groupId, groupFigures] of byBrandId) {
-    if (groupId === NO_BRAND) continue
-    const brand = brands.get(groupId)
-    if (!brand) continue
-    brandGroups.push({ id: brand.id, name: brand.name, figures: groupFigures })
-  }
-  brandGroups.sort((a, b) => a.name.localeCompare(b.name))
-
-  const brandless = byBrandId.get(NO_BRAND)
-  if (brandless) {
-    brandGroups.push({ id: NO_BRAND, name: "No brand", figures: brandless })
-  }
-
-  return brandGroups
-}
-
-function BrandGroupedCatalog({
-  figures,
-  brands,
-  spools,
-  onEdit,
-  onDelete,
-  orderMode,
-  orderSelection,
-  onOrderQuantityChange,
-}: {
-  figures: Figure[]
-  brands: Map<string, Brand>
-  spools: Map<string, Spool>
-  onEdit: (figure: Figure) => void
-  onDelete: (figure: Figure) => void
-  orderMode: boolean
-  orderSelection: ReadonlyMap<string, number>
-  onOrderQuantityChange: (figureId: string, quantity: number) => void
-}) {
-  // Deselected-id set: groups appearing later (inline create, import) are
-  // visible by default. The whole component is key-reset on import.
-  const [deselectedIds, setDeselectedIds] = useState<ReadonlySet<string>>(
-    new Set()
-  )
-
-  const groups = groupFiguresByBrand(figures, brands)
-  const visibleGroups = groups.filter((group) => !deselectedIds.has(group.id))
-  const allDeselected = groups.length > 0 && visibleGroups.length === 0
-
-  function toggleGroup(id: string) {
-    setDeselectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  return (
-    <div>
-      <div
-        className="mb-6 flex flex-wrap gap-2"
-        role="group"
-        aria-label="Filter by brand"
-        data-testid="brand-filter"
-      >
-        {groups.map((group) => {
-          const selected = !deselectedIds.has(group.id)
-          return (
-            <button
-              key={group.id}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => toggleGroup(group.id)}
-              className={cn(
-                "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                selected
-                  ? "border-primary bg-accent text-accent-foreground"
-                  : "border-foreground/50 bg-card text-muted-foreground dark:border-foreground/45"
-              )}
-              data-testid={`brand-filter-${group.id}`}
-            >
-              {/* Always rendered so toggling never reflows the wrapped row */}
-              <Check
-                className={cn(
-                  "size-3.5 shrink-0",
-                  selected ? "opacity-100" : "opacity-0"
-                )}
-                aria-hidden="true"
-              />
-              {group.name}
-            </button>
-          )
-        })}
-      </div>
-
-      {allDeselected ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Shapes />
-            </EmptyMedia>
-            <EmptyTitle>All brands hidden</EmptyTitle>
-            <EmptyDescription>
-              Every brand is deselected. Show all brands to see your figures
-              again.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={() => setDeselectedIds(new Set())}>
-              Show all
-            </Button>
-          </EmptyContent>
-        </Empty>
-      ) : (
-        <div className="animate-fade-in-up space-y-8">
-          {visibleGroups.map((group) => (
-            <section key={group.id} data-testid="brand-section">
-              <h2 className="mb-3 text-lg font-semibold">{group.name}</h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-                {group.figures.map((figure) => (
-                  <FigureCard
-                    key={figure.id}
-                    figure={figure}
-                    brands={brands}
-                    spools={spools}
-                    onEdit={onEdit}
-                    onDelete={onDelete}
-                    orderMode={orderMode}
-                    orderQuantity={orderSelection.get(figure.id) ?? 0}
-                    onOrderQuantityChange={onOrderQuantityChange}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function FigureCatalog() {
   const [searchParams] = useSearchParams()
-  const routeStateKey = `${searchParams.get("order") ?? ""}:${searchParams.get("edit") ?? ""}`
 
-  return <FigureCatalogContent key={routeStateKey} />
+  return <FigureCatalogContent key={searchParams.get("edit") ?? ""} />
 }
 
 function FigureCatalogContent() {
@@ -244,23 +79,33 @@ function FigureCatalogContent() {
   const dataGeneration = usePrintFlowStore((s) => s.dataGeneration)
   const figureList = Array.from(figures.values())
   const isMobile = useIsMobile()
+  const today = useToday()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // A composer always targets one first-class order. A link from Orders can
-  // open this route with `?order=<id>` to add lines to an existing draft/work.
-  const [targetOrderId, setTargetOrderId] = useState<string | null>(() => {
+  const isOpen = (orderId: string) =>
+    isOpenOrder(orderId, orders, queueItems, figures, spools)
+
+  // Staged copies per figure, queued together into one destination. A link
+  // from Orders (`?order=<id>`) preselects that order as the destination.
+  const [batch, setBatch] = useState<ReadonlyMap<string, number>>(new Map())
+  const [destinationId, setDestinationId] = useState<string | null>(() => {
     const requested = searchParams.get("order")
-    return requested &&
-      orders.has(requested) &&
-      deriveOrderState(requested, queueItems, figures, spools) !== "ready"
-      ? requested
-      : null
+    return requested && isOpen(requested) ? requested : null
   })
-  const [orderSelection, setOrderSelection] = useState<
-    ReadonlyMap<string, number>
-  >(new Map())
-  const targetOrder = targetOrderId ? orders.get(targetOrderId) : undefined
-  const orderMode = targetOrder !== undefined
+  // An order deleted or turned Ready since it was picked falls back to stock.
+  const destination =
+    destinationId !== null && isOpen(destinationId)
+      ? (orders.get(destinationId) ?? null)
+      : null
+  const openOrders = sortOrders(
+    Array.from(orders.values()).filter((order) => isOpen(order.id)),
+    queueItems,
+    figures,
+    spools,
+    today
+  )
+
   const requestedEdit = searchParams.get("edit")
   const initialEditFigure = requestedEdit
     ? (figures.get(requestedEdit) ?? null)
@@ -285,7 +130,7 @@ function FigureCatalogContent() {
     modal.kind === "brands"
       ? "Manage brands"
       : modal.kind === "order"
-        ? "Create order"
+        ? "New order"
         : modal.figure
           ? "Edit Figure"
           : "Add Figure"
@@ -293,14 +138,14 @@ function FigureCatalogContent() {
     modal.kind === "brands"
       ? "Create, rename, or remove the brands used to group figures."
       : modal.kind === "order"
-        ? "Enter the order details before selecting figures from the catalog."
+        ? "Enter the order details. Figures you add next are queued for this order."
         : modal.figure
           ? "Update this figure and its required filament colors."
           : "Create a figure and assign its required filament colors."
 
   const emptyDescription =
     spools.size > 0
-      ? `Great, you have ${spools.size} spool${spools.size === 1 ? "" : "s"}! Create your first figure to start building your catalog.`
+      ? `Great, you have ${pluralize(spools.size, "spool")}! Create your first figure to start building your catalog.`
       : "Add filament spools first, then create figures to assign colors."
 
   function openModal(next: CatalogModal) {
@@ -321,7 +166,7 @@ function FigureCatalogContent() {
     openModal({ kind: "brands" })
   }
 
-  function handleCreateOrder() {
+  function handleNewOrder() {
     openModal({ kind: "order" })
   }
 
@@ -353,37 +198,36 @@ function FigureCatalogContent() {
   }
 
   // Staged figures can be deleted (or replaced by an import) after selection —
-  // derive the effective selection during render so the summary and the
-  // confirm payload never count phantom pieces.
-  const effectiveSelection = new Map(
-    [...orderSelection].filter(([figureId]) => figures.has(figureId))
+  // derive the effective batch during render so the summary and the confirm
+  // payload never count phantom pieces.
+  const effectiveBatch = new Map(
+    [...batch].filter(([figureId]) => figures.has(figureId))
   )
-  const selectedFigureCount = effectiveSelection.size
-  const selectedPieceCount = [...effectiveSelection.values()].reduce(
+  const batchFigureCount = effectiveBatch.size
+  const batchPieceCount = [...effectiveBatch.values()].reduce(
     (sum, qty) => sum + qty,
     0
   )
+  const showBatchBar = batchFigureCount > 0 || destination !== null
 
-  function exitOrderMode() {
-    // Cancel/exit clears selection; the order remains visible as a Draft when
-    // it has no linked rows.
-    setTargetOrderId(null)
-    setOrderSelection(new Map())
-    const next = new URLSearchParams(searchParams)
-    next.delete("order")
-    setSearchParams(next, { replace: true })
-  }
-
-  function handleToggleOrderMode() {
-    if (orderMode) {
-      exitOrderMode()
-    } else {
-      handleCreateOrder()
+  function changeDestination(orderId: string | null) {
+    setDestinationId(orderId)
+    // The deep link only seeds the first destination; drop it once it no
+    // longer describes the page.
+    if (searchParams.has("order")) {
+      const next = new URLSearchParams(searchParams)
+      next.delete("order")
+      setSearchParams(next, { replace: true })
     }
   }
 
-  function handleOrderQuantityChange(figureId: string, quantity: number) {
-    setOrderSelection((prev) => {
+  function resetBatch() {
+    setBatch(new Map())
+    changeDestination(null)
+  }
+
+  function handleQuantityChange(figureId: string, quantity: number) {
+    setBatch((prev) => {
       const next = new Map(prev)
       if (quantity <= 0) {
         next.delete(figureId)
@@ -394,27 +238,27 @@ function FigureCatalogContent() {
     })
   }
 
-  function handleConfirmOrder() {
-    const entries = [...effectiveSelection.entries()].map(
+  function handleConfirmBatch() {
+    const entries = [...effectiveBatch.entries()].map(
       ([figureId, quantity]) => ({ figureId, quantity })
     )
     // Staged figures that no longer exist were filtered from the payload —
-    // count them as skipped so the toast stays honest about the order.
-    const staleSkippedCount = orderSelection.size - effectiveSelection.size
-    if (!targetOrder) return
-    const result = addBatchToQueue(entries, targetOrder.id)
+    // count them as skipped so the toast stays honest about the batch.
+    const staleSkippedCount = batch.size - effectiveBatch.size
+    const orderId = destination?.id ?? null
+    const result = addBatchToQueue(entries, orderId)
     switch (result.type) {
       case "queued": {
         const skippedCount = result.skipped.length + staleSkippedCount
-        const skippedLabel = `${skippedCount} figure${
-          skippedCount === 1 ? "" : "s"
-        } skipped`
+        const skippedLabel = `${pluralize(skippedCount, "figure")} skipped`
         if (result.created === 0 && result.merged === 0) {
           toast.warning(`Nothing queued · ${skippedLabel}`)
           break
         }
         const parts = [
-          `${result.pieces} piece${result.pieces === 1 ? "" : "s"} queued`,
+          `${pluralize(result.pieces, "piece")} queued ${
+            destination ? `for ${destination.reference}` : "as stock"
+          }`,
         ]
         if (result.merged > 0) {
           parts.push(
@@ -426,7 +270,14 @@ function FigureCatalogContent() {
         if (skippedCount > 0) {
           parts.push(skippedLabel)
         }
-        toast.success(parts.join(" · "))
+        const scope = orderId === null ? "stock" : `order:${orderId}`
+        toast.success(parts.join(" · "), {
+          action: {
+            label: "View",
+            onClick: () =>
+              navigate(`/figures?scope=${encodeURIComponent(scope)}`),
+          },
+        })
         break
       }
       case "empty":
@@ -436,7 +287,7 @@ function FigureCatalogContent() {
         return exhaustive
       }
     }
-    exitOrderMode()
+    resetBatch()
   }
 
   // key-reset (not an Effect) drops transient state on a data replace and on
@@ -448,11 +299,7 @@ function FigureCatalogContent() {
       <OrderForm
         key={`order-${openSeq}`}
         onSaved={(order: Order) => {
-          setTargetOrderId(order.id)
-          setOrderSelection(new Map())
-          const next = new URLSearchParams(searchParams)
-          next.set("order", order.id)
-          setSearchParams(next, { replace: true })
+          changeDestination(order.id)
           setOpen(false)
         }}
         onCancel={handleClose}
@@ -471,19 +318,14 @@ function FigureCatalogContent() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Figure Catalog</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {figureList.length > 0 ? (
-            <Button
-              variant={orderMode ? "secondary" : "outline"}
-              aria-pressed={orderMode}
-              onClick={handleToggleOrderMode}
-              data-testid="order-mode-toggle"
-            >
-              {orderMode ? "Exit order mode" : "Add order"}
-            </Button>
-          ) : null}
           <Button variant="outline" onClick={handleManageBrands}>
             Manage brands
           </Button>
+          {figureList.length > 0 ? (
+            <Button variant="outline" onClick={handleNewOrder}>
+              New order
+            </Button>
+          ) : null}
           <Button onClick={handleAddFigure}>Add Figure</Button>
         </div>
       </div>
@@ -507,39 +349,40 @@ function FigureCatalogContent() {
           key={dataGeneration}
           figures={figureList}
           brands={brands}
-          spools={spools}
-          onEdit={handleEditFigure}
-          onDelete={handleDeleteFigure}
-          orderMode={orderMode}
-          orderSelection={effectiveSelection}
-          onOrderQuantityChange={handleOrderQuantityChange}
+          renderFigure={(figure) => {
+            const quantity = effectiveBatch.get(figure.id) ?? 0
+            return (
+              <FigureCard
+                key={figure.id}
+                figure={figure}
+                brands={brands}
+                spools={spools}
+                selected={quantity > 0}
+                onEdit={handleEditFigure}
+                onDelete={handleDeleteFigure}
+              >
+                <FigureQuantityControl
+                  figure={figure}
+                  quantity={quantity}
+                  onQuantityChange={handleQuantityChange}
+                />
+              </FigureCard>
+            )
+          }}
         />
       )}
 
-      {orderMode ? (
-        <div
-          className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-popover/95 p-3 shadow-lg supports-backdrop-filter:bg-popover/90 supports-backdrop-filter:backdrop-blur-xs"
-          data-testid="order-summary-bar"
-        >
-          <div className="text-sm font-medium tabular-nums">
-            {targetOrder ? <OrderIdentity order={targetOrder} compact /> : null}
-            <span className="mt-1 block">
-              {selectedFigureCount} figure{selectedFigureCount === 1 ? "" : "s"}{" "}
-              · {selectedPieceCount} piece{selectedPieceCount === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={exitOrderMode}>
-              Cancel
-            </Button>
-            <Button
-              disabled={selectedFigureCount === 0}
-              onClick={handleConfirmOrder}
-            >
-              Confirm
-            </Button>
-          </div>
-        </div>
+      {showBatchBar ? (
+        <QueueBatchBar
+          figureCount={batchFigureCount}
+          pieceCount={batchPieceCount}
+          destination={destination}
+          openOrders={openOrders}
+          onDestinationChange={changeDestination}
+          onNewOrder={handleNewOrder}
+          onClear={resetBatch}
+          onConfirm={handleConfirmBatch}
+        />
       ) : null}
 
       {isMobile ? (
@@ -551,7 +394,9 @@ function FigureCatalogContent() {
                 {modalDescription}
               </DrawerDescription>
             </DrawerHeader>
-            <div className="min-h-0 overflow-y-auto">{modalContent}</div>
+            {/* Flex column so each form owns its scroll area and keeps its
+                actions pinned to the bottom */}
+            <div className="flex min-h-0 flex-1 flex-col">{modalContent}</div>
           </DrawerContent>
         </Drawer>
       ) : (
@@ -563,7 +408,7 @@ function FigureCatalogContent() {
                 {modalDescription}
               </SheetDescription>
             </SheetHeader>
-            <div className="min-h-0 overflow-y-auto">{modalContent}</div>
+            <div className="flex min-h-0 flex-1 flex-col">{modalContent}</div>
           </SheetContent>
         </Sheet>
       )}

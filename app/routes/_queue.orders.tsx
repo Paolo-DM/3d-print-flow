@@ -1,7 +1,7 @@
 import { PackageCheck } from "lucide-react"
 import { useSearchParams } from "react-router"
 
-import { deriveOrderState, parseQueueScope, sortOrders } from "~/lib/derived"
+import { isOpenOrder, parseQueueScope, sortOrders } from "~/lib/derived"
 import { usePrintFlowStore } from "~/lib/store"
 import type { Order } from "~/lib/types"
 import { useToday } from "~/hooks/use-today"
@@ -38,9 +38,8 @@ export default function OrdersView() {
     figures,
     spools,
     today
-  ).filter(
-    (order) =>
-      deriveOrderState(order.id, queueItems, figures, spools) !== "ready"
+  ).filter((order) =>
+    isOpenOrder(order.id, orders, queueItems, figures, spools)
   )
 
   if (visibleOrders.length === 0) {

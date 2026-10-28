@@ -1,5 +1,6 @@
 import { parseTimestamp } from "~/lib/date"
 import type { Figure, Order, QueueItem, Spool } from "~/lib/types"
+import { pluralize } from "~/lib/utils"
 
 export interface ColorRankingEntry {
   spool: Spool
@@ -167,7 +168,7 @@ export function computeQueueItemIssue(
   if (spoolIds.length > 0) {
     return {
       type: "missing-spool",
-      reason: `${figure.name} is missing ${spoolIds.length} required spool${spoolIds.length === 1 ? "" : "s"}`,
+      reason: `${figure.name} is missing ${pluralize(spoolIds.length, "required spool")}`,
       figureId: figure.id,
       spoolIds,
     }
@@ -231,6 +232,49 @@ export function isFinishedOrderLine(
   return (
     deriveOrderState(queueItem.orderId, queueItems, figures, spools) !== "ready"
   )
+}
+
+/** An existing Order that still belongs to the Queue (not yet Ready). */
+export function isOpenOrder(
+  orderId: string,
+  orders: Map<string, Order>,
+  queueItems: Map<string, QueueItem>,
+  figures: Map<string, Figure>,
+  spools: Map<string, Spool>
+): boolean {
+  return (
+    orders.has(orderId) &&
+    deriveOrderState(orderId, queueItems, figures, spools) !== "ready"
+  )
+}
+
+/**
+ * The lines the Queue currently shows: everything except complete Stock Lines
+ * and the lines of Ready Orders, which both belong to Completed.
+ */
+export function getQueueLines(
+  queueItems: Map<string, QueueItem>,
+  figures: Map<string, Figure>,
+  spools: Map<string, Spool>,
+  scope: QueueScope = { kind: "all" }
+): QueueItem[] {
+  const orderStates = new Map<string, WorkState>()
+  return Array.from(queueItems.values()).filter((queueItem) => {
+    if (!queueItemMatchesScope(queueItem, scope)) return false
+    const { orderId } = queueItem
+    if (orderId === null) {
+      return !computeCompletionStatus(
+        queueItem,
+        figures.get(queueItem.figureId)
+      )
+    }
+    let state = orderStates.get(orderId)
+    if (state === undefined) {
+      state = deriveOrderState(orderId, queueItems, figures, spools)
+      orderStates.set(orderId, state)
+    }
+    return state !== "ready"
+  })
 }
 
 /**

@@ -12,6 +12,7 @@ import { usePrintFlowStore } from "~/lib/store"
 import type { Brand, Figure, QueueItem, Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Badge } from "~/components/ui/badge"
+import { FINISH_LABELS, FinishBadge } from "~/components/FinishBadge"
 import {
   Collapsible,
   CollapsibleContent,
@@ -20,6 +21,7 @@ import {
 import { Progress } from "~/components/ui/progress"
 import { Separator } from "~/components/ui/separator"
 import { ColorChip } from "~/components/ColorChip"
+import { Notes } from "~/components/Notes"
 import { QuantityBadge } from "~/components/QuantityBadge"
 import { OrderIdentity } from "~/components/OrderIdentity"
 import type { CompletionPhase } from "~/components/QueueItemCard"
@@ -120,8 +122,8 @@ export function ColorRankingEntry({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-all duration-200 hover:bg-muted/60"
-          aria-label={`${entry.spool.name}: ${entry.count} ${entry.count === 1 ? "copy" : "copies"} remaining, ${open ? "collapse" : "expand"}`}
+          className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors duration-150 hover:bg-muted/60"
+          aria-label={`${entry.spool.name}${entry.spool.finish ? ` ${FINISH_LABELS[entry.spool.finish]}` : ""}: ${entry.count} ${entry.count === 1 ? "copy" : "copies"} remaining, ${open ? "collapse" : "expand"}`}
           data-testid="color-ranking-entry"
         >
           <span className="w-6 text-center text-base font-bold text-muted-foreground tabular-nums">
@@ -137,8 +139,11 @@ export function ColorRankingEntry({
             aria-hidden="true"
             data-testid="color-swatch"
           />
-          <span className="min-w-0 flex-1">
-            <span className="text-base font-semibold">{entry.spool.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-base font-semibold">
+              {entry.spool.name}
+            </span>
+            <FinishBadge finish={entry.spool.finish} />
           </span>
           <span className="text-xs text-muted-foreground">
             {entry.count === 1 ? "copy" : "copies"}
@@ -240,6 +245,7 @@ export function ColorRankingEntry({
                       )
                     })}
                   </div>
+                  <Notes notes={figure.notes} />
                   <div className="flex items-center gap-2">
                     <Progress value={percentage} className="flex-1" />
                     <span className="text-xs text-muted-foreground tabular-nums">

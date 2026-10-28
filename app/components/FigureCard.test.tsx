@@ -4,19 +4,10 @@ import "fake-indexeddb/auto"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { store } from "~/lib/store"
 import { createBrand, createFigure, createSpool } from "~/lib/test-utils"
-import { FigureCard } from "~/components/FigureCard"
+import { FigureCard, FigureQuantityControl } from "~/components/FigureCard"
 
-afterEach(() => {
-  cleanup()
-  store.setState({
-    spools: new Map(),
-    brands: new Map(),
-    figures: new Map(),
-    queueItems: new Map(),
-  })
-})
+afterEach(cleanup)
 
 const shippuden = createBrand({ id: "b1", name: "Naruto Shippuden" })
 const brands = new Map([[shippuden.id, shippuden]])
@@ -188,56 +179,65 @@ describe("FigureCard", () => {
     expect(screen.queryByRole("button", { name: "Delete Naruto" })).toBeNull()
   })
 
-  it("disables Add to Queue button when figure has zero requiredColors", () => {
-    const figure = createFigure({ name: "Empty", requiredColors: [] })
+  it("renders the figure notes when present", () => {
+    const figure = createFigure({ name: "Naruto", notes: "Hair at 0.12mm" })
     render(<FigureCard figure={figure} brands={brands} spools={new Map()} />)
 
-    const btn = screen.getByRole("button", {
-      name: "Add Empty to stock queue",
-    }) as HTMLButtonElement
-    expect(btn.disabled).toBe(true)
+    expect(screen.getByTestId("notes").textContent).toContain("Hair at 0.12mm")
   })
 
-  it("adds directly to the stock queue", () => {
-    const spool = createSpool({ id: "s1" })
-    const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
-    // the store command guards against unknown figures
-    store.setState({ figures: new Map([[figure.id, figure]]) })
+  it("renders no notes block for blank notes", () => {
+    const figure = createFigure({ name: "Naruto", notes: "  " })
+    render(<FigureCard figure={figure} brands={brands} spools={new Map()} />)
+
+    expect(screen.queryByTestId("notes")).toBeNull()
+  })
+})
+
+describe("FigureQuantityControl", () => {
+  it("explains why a figure without colors cannot be added", () => {
+    const figure = createFigure({ name: "Empty", requiredColors: [] })
     render(
-      <FigureCard
+      <FigureQuantityControl
         figure={figure}
-        brands={brands}
-        spools={new Map([["s1", spool]])}
+        quantity={0}
+        onQuantityChange={vi.fn()}
       />
     )
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add Naruto to stock queue" })
-    )
-
-    const items = [...store.getState().queueItems.values()]
-    expect(items).toHaveLength(1)
-    expect(items[0].figureId).toBe(figure.id)
-    expect(items[0].orderId).toBeNull()
+    expect(screen.queryByRole("button", { name: "Add Empty" })).toBeNull()
+    expect(screen.getByText("Assign colors to queue this figure")).toBeTruthy()
   })
 
-  it("a rejected add leaves the queue empty and never flashes Added!", () => {
-    const spool = createSpool({ id: "s1" })
-    // figure NOT seeded in the store — the command answers rejected
+  it("stages one copy from Add, then steps the quantity", () => {
     const figure = createFigure({ name: "Naruto", requiredColors: ["s1"] })
-    render(
-      <FigureCard
+    const onQuantityChange = vi.fn()
+    const { rerender } = render(
+      <FigureQuantityControl
         figure={figure}
-        brands={brands}
-        spools={new Map([["s1", spool]])}
+        quantity={0}
+        onQuantityChange={onQuantityChange}
       />
     )
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add Naruto to stock queue" })
-    )
+    fireEvent.click(screen.getByRole("button", { name: "Add Naruto" }))
+    expect(onQuantityChange).toHaveBeenLastCalledWith(figure.id, 1)
 
-    expect(store.getState().queueItems.size).toBe(0)
-    expect(screen.queryByText("Added!")).toBeNull()
+    rerender(
+      <FigureQuantityControl
+        figure={figure}
+        quantity={1}
+        onQuantityChange={onQuantityChange}
+      />
+    )
+    fireEvent.click(
+      screen.getByRole("button", { name: "Increase quantity of Naruto" })
+    )
+    expect(onQuantityChange).toHaveBeenLastCalledWith(figure.id, 2)
+    // − at 1 unstages
+    fireEvent.click(
+      screen.getByRole("button", { name: "Decrease quantity of Naruto" })
+    )
+    expect(onQuantityChange).toHaveBeenLastCalledWith(figure.id, 0)
   })
 })

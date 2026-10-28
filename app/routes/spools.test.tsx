@@ -251,6 +251,37 @@ describe("SpoolLibrary route", () => {
     expect(screen.queryByText("Delete")).toBeNull()
   })
 
+  it("referenced spool with alternatives: replacing remaps figures and deletes", async () => {
+    const red = createSpool({ id: "red", name: "Red PLA" })
+    const crimson = createSpool({ id: "crimson", name: "Crimson PLA" })
+    const figure = createFigure({ name: "Naruto", requiredColors: ["red"] })
+    store.setState({
+      spools: new Map([
+        [red.id, red],
+        [crimson.id, crimson],
+      ]),
+      figures: new Map([[figure.id, figure]]),
+    })
+
+    renderSpools()
+    fireEvent.click(screen.getByLabelText("Delete Red PLA"))
+    await screen.findByRole("alertdialog")
+
+    expect(screen.getByText("Replace Spool")).toBeTruthy()
+    const confirm = screen.getByText("Replace & Delete")
+    expect(confirm.hasAttribute("disabled")).toBe(true)
+
+    fireEvent.change(screen.getByLabelText("Replace with"), {
+      target: { value: "crimson" },
+    })
+    fireEvent.click(confirm)
+
+    expect(store.getState().spools.has("red")).toBe(false)
+    expect(store.getState().figures.get(figure.id)?.requiredColors).toEqual([
+      "crimson",
+    ])
+  })
+
   it("confirming delete removes spool from store", async () => {
     const spool = createSpool({ name: "Red PLA", hex: "#FF0000" })
     store.setState({ spools: new Map([[spool.id, spool]]) })

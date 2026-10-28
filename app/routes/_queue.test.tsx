@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto"
 
-import { cleanup, render, screen, within } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createRoutesStub } from "react-router"
 
@@ -114,5 +120,42 @@ describe("QueueLayout", () => {
 
     const scope = await screen.findByLabelText("Queue scope")
     expect((scope as HTMLSelectElement).value).toBe("all")
+  })
+
+  it("Clear queue is disabled when nothing is queued", async () => {
+    renderQueue()
+
+    const clear = (await screen.findByRole("button", {
+      name: "Clear queue",
+    })) as HTMLButtonElement
+    expect(clear.disabled).toBe(true)
+  })
+
+  it("Clear queue confirms, then removes only the active lines", async () => {
+    const spool = createSpool({ id: "s1" })
+    const figure = createFigure({ id: "f1", requiredColors: ["s1"] })
+    const open = createQueueItem({ id: "open", figureId: "f1", quantity: 2 })
+    const done = createQueueItem({
+      id: "done",
+      figureId: "f1",
+      completedCounts: { s1: 1 },
+    })
+    store.setState({
+      spools: new Map([["s1", spool]]),
+      figures: new Map([["f1", figure]]),
+      queueItems: new Map([
+        [open.id, open],
+        [done.id, done],
+      ]),
+    })
+    renderQueue()
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear queue" }))
+    expect(screen.getByRole("alertdialog").textContent).toContain(
+      "1 line (2 pieces)"
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Remove 1 line" }))
+
+    expect([...store.getState().queueItems.keys()]).toEqual(["done"])
   })
 })

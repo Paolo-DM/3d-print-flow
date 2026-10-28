@@ -3,6 +3,7 @@ import { Pencil, Tags, Trash2 } from "lucide-react"
 
 import { usePrintFlowStore } from "~/lib/store"
 import type { Brand } from "~/lib/types"
+import { pluralize } from "~/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,10 +34,6 @@ type RenameError = "invalid" | "collision"
 const RENAME_ERROR_MESSAGES: Record<RenameError, string> = {
   invalid: "Enter a brand name.",
   collision: "This name is already in use.",
-}
-
-function figureLabel(count: number) {
-  return `${count} figure${count === 1 ? "" : "s"}`
 }
 
 /**
@@ -232,7 +229,7 @@ export function BrandManager() {
                         {brand.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {figureLabel(figureCount)}
+                        {pluralize(figureCount, "figure")}
                       </p>
                     </div>
                     <Button
@@ -277,7 +274,7 @@ export function BrandManager() {
                 ? null
                 : deletingCount === 0
                   ? `"${deletingBrand.name}" is not referenced by any figures.`
-                  : `Deleting "${deletingBrand.name}" keeps its ${figureLabel(deletingCount)} and moves them to "No brand".`}
+                  : `Deleting "${deletingBrand.name}" keeps its ${pluralize(deletingCount, "figure")} and moves them to "No brand".`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
