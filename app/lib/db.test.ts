@@ -11,7 +11,7 @@ import {
   writeStore,
   writeStores,
 } from "~/lib/db"
-import v1Fixture from "~/lib/fixtures/export-v1-2026-08-28.json"
+import { STARTER_SPOOLS } from "~/lib/starter-data"
 import {
   createBrand,
   createFigure,
@@ -121,7 +121,9 @@ function v1Figure(
 }
 
 function expectStarterCatalog(data: Awaited<ReturnType<typeof hydrate>>) {
-  expect(data.spools).toEqual(v1Fixture.data.spools)
+  expect(data.spools).toEqual(
+    Object.fromEntries(STARTER_SPOOLS.map((spool) => [spool.id, spool]))
+  )
   expect(data.brands).toEqual({
     "4d5b503d-e96b-44bf-bfaa-77a80ecfdb90": {
       id: "4d5b503d-e96b-44bf-bfaa-77a80ecfdb90",
@@ -702,7 +704,7 @@ describe("connection lifecycle", () => {
     indexedDB = new IDBFactory()
 
     const data = await hydrate()
-    expect(Object.keys(data.spools)).toHaveLength(25)
+    expect(Object.keys(data.spools)).toHaveLength(STARTER_SPOOLS.length)
     expect(Object.keys(data.brands)).toHaveLength(3)
   })
 

@@ -23,7 +23,15 @@ import {
   setPersist,
   toJSON,
 } from "~/lib/store"
-import type { Brand, Figure, Order, QueueItem, Spool } from "~/lib/types"
+import { SPOOL_FINISHES } from "~/lib/types"
+import type {
+  Brand,
+  Figure,
+  Order,
+  QueueItem,
+  Spool,
+  SpoolFinish,
+} from "~/lib/types"
 
 export interface ExportEnvelope {
   version: 4
@@ -97,7 +105,9 @@ function isValidSpool(value: unknown): value is Spool {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
-    typeof value.hex === "string"
+    typeof value.hex === "string" &&
+    (value.finish === undefined ||
+      SPOOL_FINISHES.includes(value.finish as SpoolFinish))
   )
 }
 

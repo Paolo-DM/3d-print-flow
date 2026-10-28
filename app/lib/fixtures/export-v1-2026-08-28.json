@@ -331,12 +331,7 @@
         "franchise": "Lilo & Stitch",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-pink",
-          "sp-purple",
-          "sp-white",
-          "sp-black"
-        ]
+        "requiredColors": ["sp-pink", "sp-purple", "sp-white", "sp-black"]
       },
       "fig-charmander": {
         "id": "fig-charmander",
@@ -344,11 +339,7 @@
         "franchise": "Pokemon",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-orange",
-          "sp-lemon-yellow",
-          "sp-red"
-        ]
+        "requiredColors": ["sp-orange", "sp-lemon-yellow", "sp-red"]
       },
       "fig-eevee": {
         "id": "fig-eevee",
@@ -356,12 +347,7 @@
         "franchise": "Pokemon",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-brown",
-          "sp-beige",
-          "sp-white",
-          "sp-black"
-        ]
+        "requiredColors": ["sp-brown", "sp-beige", "sp-white", "sp-black"]
       },
       "fig-goku": {
         "id": "fig-goku",
@@ -383,12 +369,7 @@
         "franchise": "Pokemon",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-yellow",
-          "sp-black",
-          "sp-red",
-          "sp-brown"
-        ]
+        "requiredColors": ["sp-yellow", "sp-black", "sp-red", "sp-brown"]
       },
       "fig-spiderman": {
         "id": "fig-spiderman",
@@ -396,12 +377,7 @@
         "franchise": "Marvel",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-red",
-          "sp-dark-blue",
-          "sp-black",
-          "sp-white"
-        ]
+        "requiredColors": ["sp-red", "sp-dark-blue", "sp-black", "sp-white"]
       },
       "fig-squirtle": {
         "id": "fig-squirtle",
@@ -438,11 +414,7 @@
         "franchise": "Marvel",
         "size": 60,
         "notes": "",
-        "requiredColors": [
-          "sp-black",
-          "sp-white",
-          "sp-red"
-        ]
+        "requiredColors": ["sp-black", "sp-white", "sp-red"]
       },
       "dffa2690-258c-4c3b-afee-e652437667e2": {
         "id": "dffa2690-258c-4c3b-afee-e652437667e2",
@@ -466,21 +438,14 @@
         "id": "1ab44f31-5344-4188-b5c0-838d47ab7c61",
         "figureId": "fig-angel",
         "type": "order",
-        "completedColors": [
-          "sp-pink",
-          "sp-purple",
-          "sp-white",
-          "sp-black"
-        ],
+        "completedColors": ["sp-pink", "sp-purple", "sp-white", "sp-black"],
         "completedAt": "2026-04-01T08:26:13.501Z"
       },
       "3c29ac35-f969-4f7b-a4f9-f5e77da22e93": {
         "id": "3c29ac35-f969-4f7b-a4f9-f5e77da22e93",
         "figureId": "369ad38e-6184-4798-8e21-6f6e565070ac",
         "type": "stock",
-        "completedColors": [
-          "89a921f8-cfb2-4ec4-8c9b-aca24f53c119"
-        ],
+        "completedColors": ["89a921f8-cfb2-4ec4-8c9b-aca24f53c119"],
         "completedAt": null
       },
       "7d2df7d9-842b-4d33-bcb5-d960501a4822": {
@@ -501,12 +466,7 @@
         "id": "b6ee7c14-15bb-450a-83f2-22467a1c9fc4",
         "figureId": "fig-pikachu",
         "type": "stock",
-        "completedColors": [
-          "sp-black",
-          "sp-red",
-          "sp-yellow",
-          "sp-brown"
-        ],
+        "completedColors": ["sp-black", "sp-red", "sp-yellow", "sp-brown"],
         "completedAt": "2026-08-12T13:16:46.541Z"
       },
       "c0eabe80-d85a-4bc5-8377-dd3a434d329f": {
@@ -561,12 +521,7 @@
         "id": "f010f04e-0405-47e2-82e2-ef6618a30573",
         "figureId": "fig-angel",
         "type": "stock",
-        "completedColors": [
-          "sp-black",
-          "sp-white",
-          "sp-purple",
-          "sp-pink"
-        ],
+        "completedColors": ["sp-black", "sp-white", "sp-purple", "sp-pink"],
         "completedAt": "2026-03-31T16:08:09.743Z"
       },
       "f088d3f8-c625-447d-8dcc-7b5a7a23369e": {
@@ -588,11 +543,7 @@
         "id": "qi-charmander",
         "figureId": "fig-charmander",
         "type": "stock",
-        "completedColors": [
-          "sp-orange",
-          "sp-lemon-yellow",
-          "sp-red"
-        ],
+        "completedColors": ["sp-orange", "sp-lemon-yellow", "sp-red"],
         "completedAt": "2026-03-31T17:19:06.007Z"
       }
     }

@@ -294,6 +294,21 @@ describe("validateExportEnvelope", () => {
     expect(validateExportEnvelope(buildValidEnvelope())).toBe(true)
   })
 
+  it("accepts a known spool finish and rejects an unknown one", () => {
+    const withFinish = (finish: string) => {
+      const envelope = buildValidEnvelope()
+      return {
+        ...envelope,
+        data: {
+          ...envelope.data,
+          spools: { s1: { ...envelope.data.spools.s1, finish } },
+        },
+      }
+    }
+    expect(validateExportEnvelope(withFinish("matte"))).toBe(true)
+    expect(validateExportEnvelope(withFinish("glossy"))).toBe(false)
+  })
+
   it("rejects record keys that disagree with embedded ids in every schema", () => {
     const v1 = buildValidV1Envelope()
     ;(v1.data as Record<string, unknown>).spools = {

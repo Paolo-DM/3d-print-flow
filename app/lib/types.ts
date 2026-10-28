@@ -1,7 +1,12 @@
+export const SPOOL_FINISHES = ["basic", "matte"] as const
+export type SpoolFinish = (typeof SPOOL_FINISHES)[number]
+
 export interface Spool {
   id: string
   name: string
   hex: string
+  /** Absent when the user never said — older exports and custom spools. */
+  finish?: SpoolFinish
 }
 
 export interface Brand {

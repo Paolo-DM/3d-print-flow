@@ -5,6 +5,7 @@ import type { Spool } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent } from "~/components/ui/card"
+import { FinishBadge } from "~/components/FinishBadge"
 
 interface SpoolCardProps {
   spool: Spool
@@ -16,7 +17,7 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
   const lightness = getPerceivedLightness(spool.hex)
 
   return (
-    <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <Card>
       <CardContent className="flex items-center gap-3">
         <div
           className={cn(
@@ -28,8 +29,11 @@ export function SpoolCard({ spool, onEdit, onDelete }: SpoolCardProps) {
           aria-hidden="true"
           data-testid="spool-swatch"
         />
-        <span className="flex-1 text-sm font-semibold text-foreground">
-          {spool.name}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {spool.name}
+          </span>
+          <FinishBadge finish={spool.finish} />
         </span>
         <div className="flex gap-1">
           <Button
