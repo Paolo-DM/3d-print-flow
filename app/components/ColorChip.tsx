@@ -47,7 +47,7 @@ export function ColorChip({
   }
 
   const interactivity = isInteractive
-    ? "cursor-pointer hover:scale-105 active:scale-95"
+    ? "cursor-pointer active:scale-[0.97]"
     : "cursor-default"
 
   if (isCompleted) {
@@ -96,8 +96,7 @@ export function ColorChip({
         "inline-flex min-h-11 items-center gap-2 rounded-full border-2 bg-muted px-3 py-1.5 transition-[transform,box-shadow] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isPartial ? "border-foreground/40" : "border-transparent",
         interactivity,
-        isCurrent &&
-          "animate-[pulse_2s_ease-in-out_infinite] ring-2 ring-primary",
+        isCurrent && "ring-2 ring-primary",
         justReset && "animate-chip-reset"
       )}
       disabled={!isInteractive}

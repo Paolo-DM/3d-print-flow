@@ -8,11 +8,16 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
-  --animate-completion-pulse: completion-pulse 500ms ease-out 150ms both;
-  --animate-completion-collapse: completion-collapse 300ms ease-out forwards;
-  --animate-chip-reset: chip-reset 400ms ease-out both;
-  --animate-fade-in-up: fade-in-up 400ms ease-out both;
-  --animate-slide-in: slide-in 300ms ease-out both;
+  /* Stronger than the CSS keyword curves; overrides Tailwind's ease-out so
+     every ease-out utility and animation shares it. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-completion-pulse: completion-pulse 500ms var(--ease-out) 150ms both;
+  --animate-completion-collapse: completion-collapse 300ms var(--ease-out)
+    forwards;
+  --animate-chip-reset: chip-reset 400ms var(--ease-out) both;
+  --animate-fade-in-up: fade-in-up 200ms var(--ease-out) both;
+  --animate-slide-in: slide-in 200ms var(--ease-out) both;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -128,7 +133,7 @@
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -157,15 +162,23 @@
   }
 }
 
+/* Height collapses too so the entries below glide up instead of jumping.
+   Needs interpolate-size (set on :root); without it the height snaps at the
+   end as before. */
 @keyframes completion-collapse {
   from {
     opacity: 1;
     transform: scale(1);
+    height: auto;
   }
 
   to {
     opacity: 0;
     transform: scale(0.95);
+    height: 0;
+    padding-block: 0;
+    margin-block: 0;
+    border-width: 0;
   }
 }
 
@@ -195,6 +208,9 @@
   }
   html {
     @apply font-sans;
+  }
+  :root {
+    interpolate-size: allow-keywords;
   }
 }
 

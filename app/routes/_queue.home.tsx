@@ -272,7 +272,8 @@ function ScopedColorView({
         <div
           key={entry.spool.id}
           className="animate-fade-in-up"
-          style={{ animationDelay: `${index * 50}ms` }}
+          // Capped so a long ranking never makes the last rows wait
+          style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
         >
           <ColorRankingEntry
             entry={entry}

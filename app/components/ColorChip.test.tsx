@@ -38,25 +38,25 @@ describe("ColorChip at quantity 1 (toggle parity)", () => {
     expect(screen.queryByText("1/1")).toBeNull()
   })
 
-  it("renders pulsing outline when isCurrent and pending", () => {
+  it("renders a steady outline when isCurrent and pending", () => {
     const spool = createSpool({ name: "Green PLA", hex: "#00FF00" })
     const { container } = render(
       <ColorChip spool={spool} count={0} quantity={1} isCurrent />
     )
 
     const chip = container.firstElementChild as HTMLElement
-    expect(chip.className).toContain("animate-[pulse_2s_ease-in-out_infinite]")
+    expect(chip.className).not.toContain("pulse")
     expect(chip.className).toContain("ring-2")
   })
 
-  it("does not render pulsing outline when not isCurrent", () => {
+  it("does not render the outline when not isCurrent", () => {
     const spool = createSpool({ name: "Green PLA", hex: "#00FF00" })
     const { container } = render(
       <ColorChip spool={spool} count={0} quantity={1} />
     )
 
     const chip = container.firstElementChild as HTMLElement
-    expect(chip.className).not.toContain("animate-pulse")
+    expect(chip.className).not.toContain("ring-primary")
   })
 
   it("outlines the spool swatch in pending state regardless of its color", () => {
