@@ -1,6 +1,7 @@
 import { CalendarDays, Store } from "lucide-react"
 
 import type { Order } from "~/lib/types"
+import { Notes } from "~/components/Notes"
 import { Badge } from "~/components/ui/badge"
 
 export function OrderIdentity({
@@ -33,9 +34,7 @@ export function OrderIdentity({
         </div>
       ) : null}
       {!compact && order.notes ? (
-        <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
-          {order.notes}
-        </p>
+        <Notes notes={order.notes} className="mt-2" />
       ) : null}
     </div>
   )

@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react"
 
 import { nextOrderReference, usePrintFlowStore } from "~/lib/store"
 import type { Order } from "~/lib/types"
+import { NOTES_MAX_LENGTH, NotesCounter } from "~/components/Notes"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
@@ -84,74 +85,82 @@ export function OrderForm({
   }
 
   return (
-    <form className="space-y-4 p-4" onSubmit={handleSubmit} noValidate>
-      <div className="space-y-1.5">
-        <Label htmlFor={referenceId}>Reference</Label>
-        <Input
-          ref={referenceRef}
-          id={referenceId}
-          value={reference}
-          onChange={(event) => setReference(event.target.value)}
-          aria-invalid={!!errors.reference}
-          aria-describedby={errors.reference ? referenceErrorId : undefined}
-        />
-        {errors.reference ? (
-          <p id={referenceErrorId} className="text-sm text-destructive">
-            {errors.reference}
+    <form
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      onSubmit={handleSubmit}
+      noValidate
+    >
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+        <div className="space-y-1.5">
+          <Label htmlFor={referenceId}>Reference</Label>
+          <Input
+            ref={referenceRef}
+            id={referenceId}
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            aria-invalid={!!errors.reference}
+            aria-describedby={errors.reference ? referenceErrorId : undefined}
+          />
+          {errors.reference ? (
+            <p id={referenceErrorId} className="text-sm text-destructive">
+              {errors.reference}
+            </p>
+          ) : null}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={customerId}>Customer name</Label>
+            <Input
+              id={customerId}
+              value={customerName}
+              onChange={(event) => setCustomerName(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={platformId}>Platform</Label>
+            <Input
+              id={platformId}
+              value={platform}
+              onChange={(event) => setPlatform(event.target.value)}
+              placeholder="Etsy, direct, …"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={dueDateId}>Due date</Label>
+          <Input
+            ref={dueDateRef}
+            id={dueDateId}
+            type="date"
+            value={dueDate}
+            onChange={(event) => setDueDate(event.target.value)}
+            aria-invalid={!!errors.dueDate}
+            aria-describedby={errors.dueDate ? dueDateErrorId : undefined}
+          />
+          {errors.dueDate ? (
+            <p id={dueDateErrorId} className="text-sm text-destructive">
+              {errors.dueDate}
+            </p>
+          ) : null}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={notesId}>Notes</Label>
+          <Textarea
+            id={notesId}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={4}
+            maxLength={NOTES_MAX_LENGTH}
+          />
+          <NotesCounter length={notes.length} />
+        </div>
+        {formError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {formError}
           </p>
         ) : null}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={customerId}>Customer name</Label>
-          <Input
-            id={customerId}
-            value={customerName}
-            onChange={(event) => setCustomerName(event.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={platformId}>Platform</Label>
-          <Input
-            id={platformId}
-            value={platform}
-            onChange={(event) => setPlatform(event.target.value)}
-            placeholder="Etsy, direct, …"
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={dueDateId}>Due date</Label>
-        <Input
-          ref={dueDateRef}
-          id={dueDateId}
-          type="date"
-          value={dueDate}
-          onChange={(event) => setDueDate(event.target.value)}
-          aria-invalid={!!errors.dueDate}
-          aria-describedby={errors.dueDate ? dueDateErrorId : undefined}
-        />
-        {errors.dueDate ? (
-          <p id={dueDateErrorId} className="text-sm text-destructive">
-            {errors.dueDate}
-          </p>
-        ) : null}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={notesId}>Notes</Label>
-        <Textarea
-          id={notesId}
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          rows={4}
-        />
-      </div>
-      {formError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {formError}
-        </p>
-      ) : null}
-      <div className="flex justify-end gap-2">
+      <div className="flex shrink-0 justify-end gap-2 border-t border-border/70 px-4 py-3 in-data-[slot=drawer-content]:pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>

@@ -6,6 +6,7 @@ import { usePrintFlowStore } from "~/lib/store"
 import type { Figure } from "~/lib/types"
 import { cn } from "~/lib/utils"
 import { BrandCombobox, type BrandSelection } from "~/components/BrandCombobox"
+import { NOTES_MAX_LENGTH, NotesCounter } from "~/components/Notes"
 import { Button } from "~/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
@@ -139,9 +140,11 @@ export function FigureForm({ figure, onSave, onCancel }: FigureFormProps) {
               id="figure-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes..."
+              placeholder="e.g. Paint the spots with the darker green"
+              maxLength={NOTES_MAX_LENGTH}
               data-testid="figure-notes-input"
             />
+            <NotesCounter length={notes.length} />
           </Field>
           <Field>
             <FieldLabel>Colors</FieldLabel>
